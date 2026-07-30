@@ -1,0 +1,23 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      QUANTFORGE_ALLOW_NETWORK: "true"
+    ports:
+      - "8008:8008"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  terminal:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8008
+    ports:
+      - "4173:80"
+    depends_on:
+      api:
+        condition: service_healthy
