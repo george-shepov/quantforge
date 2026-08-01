@@ -1,0 +1,110 @@
+name: Deploy QuantForge
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantforge-production
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test backend
+        run: |
+          python -m pip install --disable-pip-version-check -r backend/requirements.txt
+          PYTHONPATH=backend pytest -q backend/tests
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Trust VPS host key
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Package release
+        run: |
+          tar --exclude-vcs --exclude='./.github' --exclude='./frontend/node_modules' -czf /tmp/quantforge.tgz .
+
+      - name: Upload release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          scp -P "${VPS_PORT:-22}" /tmp/quantforge.tgz \
+            "$VPS_USER@$VPS_HOST:/tmp/quantforge.tgz"
+
+      - name: Deploy and verify
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          QUANTFORGE_DEPLOY_DIR: ${{ secrets.QUANTFORGE_DEPLOY_DIR }}
+        run: |
+          set -euo pipefail
+          : "${QUANTFORGE_DEPLOY_DIR:?QUANTFORGE_DEPLOY_DIR is required}"
+          ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+            "QUANTFORGE_DEPLOY_DIR='$QUANTFORGE_DEPLOY_DIR' bash -se" <<'REMOTE'
+            set -euo pipefail
+            DEPLOY_DIR="$QUANTFORGE_DEPLOY_DIR"
+            install -d "$DEPLOY_DIR"
+            tar -xzf /tmp/quantforge.tgz -C "$DEPLOY_DIR"
+            rm /tmp/quantforge.tgz
+
+            if [ ! -s "$DEPLOY_DIR/.env" ]; then
+              umask 077
+              printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" > "$DEPLOY_DIR/.env"
+              cat >> "$DEPLOY_DIR/.env" <<'ENV'
+QUANTFORGE_ALLOW_NETWORK=true
+QUANTFORGE_TESTNET_EXECUTION_ENABLED=false
+QUANTFORGE_EXECUTION_NETWORK=disabled
+QUANTFORGE_TESTNET_MAX_NOTIONAL=100
+ENV
+            fi
+
+            docker network inspect shepov_edge >/dev/null 2>&1 || docker network create shepov_edge
+            cd "$DEPLOY_DIR"
+            docker compose -p quantforge up -d --build --remove-orphans
+            docker compose -p quantforge exec -T api \
+              python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/api/health')"
+            docker exec quantforge_terminal wget -qO- http://127.0.0.1/api/health | grep -q 'quantforge-api'
+            docker image prune -f
+          REMOTE

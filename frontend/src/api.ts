@@ -1,6 +1,6 @@
 import type { BacktestResponse, RunConfig } from './types'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8008'
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 export async function runBacktest(config: RunConfig): Promise<BacktestResponse> {
   const response = await fetch(`${API_URL}/api/backtests/run`, {

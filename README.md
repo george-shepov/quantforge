@@ -91,6 +91,8 @@ Open:
 - Health: http://localhost:8008/api/health
 - Research capabilities: http://localhost:8008/api/research/capabilities
 
+When deployed behind the shared VPS edge, open `https://quantforge.giorgiy.org`. The frontend proxies `/api`, `/docs`, and `/openapi.json` to the internal API service; no application port is published on the VPS host.
+
 ## Record market events
 
 ```bash

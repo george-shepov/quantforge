@@ -39,8 +39,6 @@ services:
       HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS: ${HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS:-}
     volumes:
       - quantforge-data:/data/quantforge
-    ports:
-      - "8008:8008"
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,17 +66,22 @@ services:
         condition: service_healthy
 
   terminal:
+    container_name: quantforge_terminal
     build:
       context: ./frontend
-      args:
-        VITE_API_URL: http://localhost:8008
-    ports:
-      - "4173:80"
     depends_on:
       api:
         condition: service_healthy
+    networks:
+      - default
+      - edge
 
 volumes:
   quantforge-data:
   quantforge-postgres:
   quantforge-redis:
+
+networks:
+  edge:
+    external: true
+    name: shepov_edge
