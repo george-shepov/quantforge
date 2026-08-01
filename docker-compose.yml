@@ -1,15 +1,71 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: quantforge
+      POSTGRES_USER: quantforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - quantforge-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantforge -d quantforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - quantforge-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: ./backend
     environment:
       QUANTFORGE_ALLOW_NETWORK: "true"
+      QUANTFORGE_DATA_ROOT: /data/quantforge
+      DATABASE_URL: postgresql+psycopg://quantforge:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/quantforge
+      REDIS_URL: redis://redis:6379/0
+      QUANTFORGE_TESTNET_EXECUTION_ENABLED: ${QUANTFORGE_TESTNET_EXECUTION_ENABLED:-false}
+      QUANTFORGE_EXECUTION_NETWORK: ${QUANTFORGE_EXECUTION_NETWORK:-disabled}
+      QUANTFORGE_SAFETY_TOKEN: ${QUANTFORGE_SAFETY_TOKEN:-}
+      QUANTFORGE_TESTNET_MAX_NOTIONAL: ${QUANTFORGE_TESTNET_MAX_NOTIONAL:-100}
+      HYPERLIQUID_TESTNET_PRIVATE_KEY: ${HYPERLIQUID_TESTNET_PRIVATE_KEY:-}
+      HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS: ${HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS:-}
+    volumes:
+      - quantforge-data:/data/quantforge
     ports:
       - "8008:8008"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/api/health')"]
       interval: 10s
       timeout: 3s
       retries: 5
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.research.worker"]
+    environment:
+      QUANTFORGE_DATA_ROOT: /data/quantforge
+      DATABASE_URL: postgresql+psycopg://quantforge:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/quantforge
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - quantforge-data:/data/quantforge
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   terminal:
     build:
@@ -21,3 +77,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  quantforge-data:
+  quantforge-postgres:
+  quantforge-redis:
