@@ -1,9 +1,9 @@
 name: Deploy QuantForge
 
-on:
+'on':
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
