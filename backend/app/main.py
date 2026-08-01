@@ -8,11 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.engine import run_backtest
 from app.exchanges import get_exchange_adapter
 from app.exchanges.base import ExchangeAdapterError
+from app.exchanges.environment import configured_environment, endpoints_for
 from app.exchanges.synthetic import SyntheticAdapter
 from app.models import BacktestRequest, BacktestResponse
 from app.research.api import router as research_router
 
-app = FastAPI(title="QuantForge API", version="0.2.0")
+app = FastAPI(title="QuantForge API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:4173", "*"],
@@ -25,19 +26,38 @@ app.include_router(research_router)
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "quantforge-api", "version": "0.2.0"}
+    return {"status": "ok", "service": "quantforge-api", "version": "0.3.0"}
 
 
 @app.get("/api/catalog")
 async def catalog() -> dict:
+    exchanges = ["hyperliquid", "bybit", "bitmex", "whitebit", "synthetic"]
+    environments = {}
+    for exchange in exchanges[:-1]:
+        environment = configured_environment(exchange)
+        endpoint = endpoints_for(exchange, environment)
+        environments[exchange] = {
+            "environment": environment.value,
+            "websocketConfigured": bool(endpoint.websocket),
+            "executionAllowed": False,
+            "badge": f"{exchange.upper()} {environment.value.upper()} — EXECUTION DISABLED",
+        }
+    environments["synthetic"] = {
+        "environment": "simulation",
+        "websocketConfigured": False,
+        "executionAllowed": False,
+        "badge": "SYNTHETIC SIMULATION",
+    }
     return {
-        "exchanges": ["hyperliquid", "bitmex", "synthetic"],
+        "exchanges": exchanges,
+        "exchangeEnvironments": environments,
         "symbols": ["BTC", "ETH", "SOL", "HYPE"],
         "intervals": ["5m", "15m", "1h", "4h", "1d"],
         "marketKinds": ["spot", "perp", "future"],
         "strategies": ["ema_crossover", "mean_reversion", "breakout"],
         "eventStrategies": ["cross_exchange_arbitrage", "inventory_market_making"],
         "scenarios": ["baseline", "flash_crash", "volatility_spike", "liquidity_drought", "funding_squeeze"],
+        "mainnetOrderSubmission": False,
     }
 
 
