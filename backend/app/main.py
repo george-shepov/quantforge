@@ -9,9 +9,10 @@ from app.engine import run_backtest
 from app.exchanges import get_exchange_adapter
 from app.exchanges.base import ExchangeAdapterError
 from app.exchanges.synthetic import SyntheticAdapter
-from app.models import BacktestRequest, BacktestResponse, MarketDataRequest
+from app.models import BacktestRequest, BacktestResponse
+from app.research.api import router as research_router
 
-app = FastAPI(title="QuantForge API", version="0.1.0")
+app = FastAPI(title="QuantForge API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:4173", "*"],
@@ -19,11 +20,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(research_router)
 
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "quantforge-api", "version": "0.1.0"}
+    return {"status": "ok", "service": "quantforge-api", "version": "0.2.0"}
 
 
 @app.get("/api/catalog")
@@ -34,6 +36,7 @@ async def catalog() -> dict:
         "intervals": ["5m", "15m", "1h", "4h", "1d"],
         "marketKinds": ["spot", "perp", "future"],
         "strategies": ["ema_crossover", "mean_reversion", "breakout"],
+        "eventStrategies": ["cross_exchange_arbitrage", "inventory_market_making"],
         "scenarios": ["baseline", "flash_crash", "volatility_spike", "liquidity_drought", "funding_squeeze"],
     }
 
