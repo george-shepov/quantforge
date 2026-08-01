@@ -41,6 +41,7 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_DEPLOYMENT_DIR: ${{ secrets.VPS_DEPLOYMENT_DIR }}
         run: |
           set -euo pipefail
@@ -48,7 +49,7 @@ jobs:
           : "${VPS_USER:?VPS_USER is required}"
           : "${VPS_DEPLOYMENT_DIR:?VPS_DEPLOYMENT_DIR is required}"
 
-          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -p "${VPS_PORT:-22}")
           release="$VPS_DEPLOYMENT_DIR/releases/$GITHUB_SHA"
 
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
@@ -70,16 +71,16 @@ jobs:
         run: |
           set -euo pipefail
           : "${QUANTFORGE_DEPLOY_DIR:?QUANTFORGE_DEPLOY_DIR is required}"
-          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -p "${VPS_PORT:-22}")
 
-          ssh "${ssh_opts[@]}" -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "mkdir -p '$QUANTFORGE_DEPLOY_DIR'"
 
           tar --exclude-vcs --exclude='./.github' -czf - . | \
-            ssh "${ssh_opts[@]}" -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "set -e; tar -xzf - -C '$QUANTFORGE_DEPLOY_DIR'"
 
-          ssh "${ssh_opts[@]}" -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "QUANTFORGE_DEPLOY_DIR='$QUANTFORGE_DEPLOY_DIR' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           DEPLOY_DIR="$QUANTFORGE_DEPLOY_DIR"
