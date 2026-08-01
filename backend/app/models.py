@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field, model_validator
 
 class ExchangeName(str, Enum):
     HYPERLIQUID = "hyperliquid"
+    BYBIT = "bybit"
     BITMEX = "bitmex"
+    WHITEBIT = "whitebit"
     SYNTHETIC = "synthetic"
 
 

@@ -5,14 +5,16 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from app.exchanges.base import ExchangeAdapter, ExchangeAdapterError
+from app.exchanges.environment import configured_environment, endpoints_for
 from app.models import Candle, MarketDataRequest
 
 
 class HyperliquidAdapter(ExchangeAdapter):
     name = "hyperliquid"
-    base_url = "https://api.hyperliquid.xyz/info"
 
     async def fetch_candles(self, request: MarketDataRequest) -> list[Candle]:
+        environment = configured_environment(self.name)
+        endpoint = endpoints_for(self.name, environment)
         end = request.end_time or datetime.now(timezone.utc)
         start = request.start_time or end - _interval_delta(request.interval, request.limit)
         payload = {
@@ -26,7 +28,7 @@ class HyperliquidAdapter(ExchangeAdapter):
         }
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(self.base_url, json=payload)
+                response = await client.post(f"{endpoint.rest}/info", json=payload)
                 response.raise_for_status()
                 data = response.json()
         except (httpx.HTTPError, ValueError) as exc:
@@ -38,11 +40,8 @@ class HyperliquidAdapter(ExchangeAdapter):
                 candles.append(
                     Candle(
                         timestamp=datetime.fromtimestamp(float(row["t"]) / 1000, tz=timezone.utc),
-                        open=float(row["o"]),
-                        high=float(row["h"]),
-                        low=float(row["l"]),
-                        close=float(row["c"]),
-                        volume=float(row.get("v", 0.0)),
+                        open=float(row["o"]), high=float(row["h"]), low=float(row["l"]),
+                        close=float(row["c"]), volume=float(row.get("v", 0.0)),
                     )
                 )
             except (KeyError, TypeError, ValueError) as exc:
