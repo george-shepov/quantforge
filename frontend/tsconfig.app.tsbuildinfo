@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/MetricGrid.tsx","./src/components/PerformanceChart.tsx","./src/components/TradesTable.tsx"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/api.test.ts","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/ArbitrageWorkspace.test.ts","./src/components/ArbitrageWorkspace.tsx","./src/components/MetricGrid.tsx","./src/components/PerformanceChart.tsx","./src/components/TradesTable.tsx"],"version":"5.9.3"}

@@ -78,6 +78,10 @@ opportunity tape with responsive mobile cards. Build, Guided, Expert, and Watch 
 share the exact same response data: Build exposes assumptions, Guided teaches the decision,
 Expert preserves compact raw evidence, and Watch & Learn advances through replay candidates as
 a lesson. Accepted and rejected filters never remove the explanation attached to a candidate.
+From any selected row, **Replay opportunity** reruns the source dataset with the exact scanner
+parameters, while **Add to experiment** queues those parameters in the existing walk-forward and
+Monte Carlo research pipeline. These handoffs preserve the opportunity ID and evidence in local
+history and do not introduce an execution endpoint.
 
 ### Experiment system
 

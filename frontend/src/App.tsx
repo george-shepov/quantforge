@@ -152,7 +152,7 @@ export default function App() {
       </section>
 
       {workspace === 'backtest' && <BacktestWorkspace catalog={catalog} remember={remember} />}
-      {workspace === 'arbitrage' && <ArbitrageWorkspace datasets={datasets} remember={remember} />}
+      {workspace === 'arbitrage' && <ArbitrageWorkspace datasets={datasets} remember={remember} onChanged={refreshPlatform} />}
       {workspace === 'recordings' && <RecordingWorkspace recordings={recordings} datasets={datasets} onChanged={refreshPlatform} />}
       {workspace === 'replay' && <ReplayWorkspace datasets={datasets} remember={remember} />}
       {workspace === 'experiments' && <ExperimentWorkspace datasets={datasets} experiments={experiments} onChanged={refreshPlatform} remember={remember} />}
