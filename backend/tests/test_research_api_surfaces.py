@@ -1,3 +1,5 @@
+import time
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -49,6 +51,7 @@ def test_execution_story_endpoint_supports_guided_mode():
 def test_experiment_store_lists_newest_first(tmp_path):
     store = ExperimentStore(f"sqlite:///{tmp_path / 'experiments.sqlite3'}")
     first = store.create(ExperimentConfig(dataset_id="first", strategy="cross_exchange_arbitrage"))
+    time.sleep(0.002)
     second = store.create(ExperimentConfig(dataset_id="second", strategy="inventory_market_making"))
 
     recent = store.list_recent()
