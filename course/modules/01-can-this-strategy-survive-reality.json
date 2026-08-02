@@ -1,0 +1,404 @@
+{
+  "schema_version": "0.1.0",
+  "module_id": "qf-course-01-survive-reality",
+  "title": "Can This Strategy Survive Reality?",
+  "course_title": "Crypto Algorithmic Trading Research with Python",
+  "course_subtitle": "Backtesting, Order Books, Walk-Forward Analysis, and Monte Carlo with QuantForge",
+  "target_runtime_minutes": 82,
+  "audience": [
+    "software developers new to systematic trading",
+    "technical traders who want reproducible research workflows"
+  ],
+  "promise": "Take one trading idea from an attractive baseline backtest through execution friction, L2 partial fills, time-window evaluation, Monte Carlo uncertainty, and a defensible research verdict.",
+  "safety": {
+    "financial_advice": false,
+    "mainnet_order_submission": false,
+    "allowed_environments": [
+      "synthetic",
+      "recorded",
+      "live-read-only",
+      "testnet-dry-run"
+    ],
+    "required_labels": [
+      "data provenance",
+      "execution environment",
+      "scenario version",
+      "dataset checksum",
+      "random seed"
+    ]
+  },
+  "research_contract": {
+    "question": "Can a simple trend-following idea remain credible after realistic trading costs, order-book constraints, time-window testing, and path uncertainty are introduced?",
+    "hypothesis": "A 20/50 EMA crossover on BTC perpetual candles will remain positive after ordinary execution costs and within the declared drawdown constraint.",
+    "assumptions": [
+      "Input data is correctly ordered and contains no look-ahead leakage.",
+      "Signals use only information available at each bar or event.",
+      "Fee and slippage values are plausible for the intended venue and order size.",
+      "The L2 snapshot is a deterministic teaching fixture, not current BTC liquidity.",
+      "The event fixture demonstrates mechanics but cannot prove deployability.",
+      "Monte Carlo resampling explores path uncertainty but cannot repair biased evidence."
+    ],
+    "invalidation_conditions": [
+      "The verdict changes under one reasonable cost assumption.",
+      "Most performance comes from one time window.",
+      "Trade or fill count is too low for the conclusion.",
+      "Required liquidity is unavailable.",
+      "Synthetic evidence is represented as live-market evidence.",
+      "The result cannot be reproduced from scenario, dataset, seed, and code version."
+    ],
+    "allowed_verdicts": [
+      "reject",
+      "revise",
+      "continue_research"
+    ]
+  },
+  "labs": [
+    {
+      "lab_id": "baseline-candle-backtest",
+      "title": "Establish the baseline",
+      "duration_minutes": 13,
+      "endpoint": "/api/backtests/run",
+      "method": "POST",
+      "request": {
+        "market": {
+          "exchange": "synthetic",
+          "symbol": "BTC",
+          "interval": "1h",
+          "limit": 1000,
+          "fallback_to_synthetic": true
+        },
+        "market_kind": "perp",
+        "starting_capital": 100000,
+        "strategy": {
+          "name": "ema_crossover",
+          "fast_period": 20,
+          "slow_period": 50,
+          "lookback": 20,
+          "entry_z": 1.5,
+          "exit_z": 0.25,
+          "breakout_period": 30
+        },
+        "execution": {
+          "order_type": "market",
+          "allocation": 0.25,
+          "leverage": 2,
+          "taker_fee_bps": 5,
+          "maker_fee_bps": 2,
+          "base_slippage_bps": 3,
+          "limit_offset_bps": 2,
+          "maintenance_margin_rate": 0.005,
+          "stop_loss_pct": 0.04,
+          "take_profit_pct": 0.08
+        },
+        "scenario": {
+          "name": "baseline",
+          "start_percent": 0.6,
+          "duration_bars": 24,
+          "shock_pct": -0.12,
+          "volatility_multiplier": 3,
+          "slippage_multiplier": 4,
+          "funding_rate_hourly": 0.00001
+        }
+      },
+      "expectations": [
+        {
+          "metric": "metrics.trade_count",
+          "kind": "minimum",
+          "value": 5,
+          "reason": "Avoid drawing a strong conclusion from a trivial number of trades."
+        },
+        {
+          "metric": "metrics.total_fees",
+          "kind": "greater_than",
+          "value": 0,
+          "reason": "Execution costs must be present in a traded strategy."
+        },
+        {
+          "metric": "metrics.total_return_pct",
+          "kind": "directional",
+          "value": "record_only",
+          "reason": "The baseline is evidence to challenge, not a guaranteed positive result."
+        }
+      ],
+      "evidence_paths": [
+        "run_id",
+        "source",
+        "warnings",
+        "metrics.total_return_pct",
+        "metrics.max_drawdown_pct",
+        "metrics.total_fees",
+        "metrics.total_funding",
+        "metrics.trade_count",
+        "trades"
+      ]
+    },
+    {
+      "lab_id": "execution-friction-comparison",
+      "title": "Change one execution assumption",
+      "duration_minutes": 13,
+      "derived_from": "baseline-candle-backtest",
+      "variants": [
+        {
+          "variant_id": "higher-friction",
+          "patch": {
+            "execution.taker_fee_bps": 10,
+            "execution.base_slippage_bps": 8
+          },
+          "expected_direction": {
+            "metrics.total_fees": "increase",
+            "metrics.total_return_pct": "not_increase_due_only_to_cost",
+            "metrics.expectancy": "not_increase_due_only_to_cost"
+          }
+        },
+        {
+          "variant_id": "limit-model",
+          "patch": {
+            "execution.order_type": "limit",
+            "execution.maker_fee_bps": 2,
+            "execution.limit_offset_bps": 2
+          },
+          "expected_direction": {
+            "metrics.trade_count": "may_change",
+            "metrics.total_fees": "may_decrease",
+            "metrics.total_return_pct": "must_be_measured"
+          },
+          "warning": "A candle touch does not prove queue-position fill."
+        }
+      ],
+      "delta_metrics": [
+        "metrics.total_return_pct",
+        "metrics.total_fees",
+        "metrics.trade_count",
+        "metrics.expectancy",
+        "metrics.max_drawdown_pct"
+      ]
+    },
+    {
+      "lab_id": "l2-market-fill",
+      "title": "Consume multiple order-book levels",
+      "duration_minutes": 8,
+      "endpoint": "/api/research/execution/story",
+      "method": "POST",
+      "request": {
+        "snapshot": {
+          "exchange": "course_fixture",
+          "symbol": "BTC",
+          "timestamp_ms": 1770000000000,
+          "sequence": 1,
+          "bids": [
+            [100.0, 0.3],
+            [99.5, 0.7],
+            [99.0, 1.0]
+          ],
+          "asks": [
+            [100.5, 0.25],
+            [101.0, 0.5],
+            [102.0, 1.25]
+          ],
+          "environment": "synthetic-course-fixture"
+        },
+        "side": "buy",
+        "quantity": 1.0,
+        "limit_price": null,
+        "mode": "guided",
+        "intent": "Buy one BTC immediately and measure book impact.",
+        "hypothesis": "The order will fill near the best displayed ask.",
+        "assumptions": [
+          "Displayed depth remains available during execution.",
+          "Hidden liquidity, latency, queueing, and fees are excluded."
+        ],
+        "invalidation_conditions": [
+          "The static fixture is treated as current live BTC liquidity.",
+          "Latency or queue behavior is inferred from this snapshot."
+        ],
+        "hopes": [
+          "Most quantity fills close to the best ask."
+        ],
+        "risks": [
+          "Requested quantity exceeds top-of-book depth."
+        ]
+      },
+      "expected_exact": {
+        "execution.requested_quantity": 1.0,
+        "execution.filled_quantity": 1.0,
+        "execution.remaining_quantity": 0.0,
+        "execution.average_price": 101.125,
+        "execution.status": "filled",
+        "execution.fills.length": 3
+      },
+      "tolerance": 1e-09
+    },
+    {
+      "lab_id": "l2-limit-partial-fill",
+      "title": "Improve price and accept incomplete execution",
+      "duration_minutes": 6,
+      "derived_from": "l2-market-fill",
+      "patch": {
+        "limit_price": 101.0
+      },
+      "expected_exact": {
+        "execution.requested_quantity": 1.0,
+        "execution.filled_quantity": 0.75,
+        "execution.remaining_quantity": 0.25,
+        "execution.average_price": 100.83333333333333,
+        "execution.status": "partial",
+        "execution.fills.length": 2
+      },
+      "tolerance": 1e-09
+    },
+    {
+      "lab_id": "walk-forward-window-evaluation",
+      "title": "Inspect stability across sequential windows",
+      "duration_minutes": 14,
+      "endpoint": "/api/research/experiments",
+      "method": "POST",
+      "dataset_ref": "course-btc-l2-v1",
+      "request": {
+        "dataset_id": "course-btc-l2-v1",
+        "strategy": "inventory_market_making",
+        "starting_cash": 100000,
+        "timer_interval_ms": 1000,
+        "base_parameters": {
+          "inventory_skew_bps": 3,
+          "max_inventory": 5,
+          "quantity": 0.01
+        },
+        "parameter_grid": {
+          "spread_bps": [4, 8, 12]
+        },
+        "walk_forward_folds": 4,
+        "monte_carlo_runs": 0,
+        "monte_carlo_block_size": 2,
+        "seed": 7
+      },
+      "terminology": {
+        "approved": "walk-forward window evaluation",
+        "prohibited_until_implemented": "full walk-forward optimization",
+        "reason": "The current runner evaluates candidates on sequential test folds but does not yet train-select-lock parameters for each unseen fold."
+      },
+      "evidence_paths": [
+        "result.candidates[].parameters",
+        "result.candidates[].score",
+        "result.candidates[].folds[].return_pct",
+        "result.candidates[].folds[].max_drawdown_pct",
+        "result.candidates[].folds[].fill_count",
+        "result.candidates[].folds[].event_count"
+      ]
+    },
+    {
+      "lab_id": "block-monte-carlo",
+      "title": "Replace one path with a conditional distribution",
+      "duration_minutes": 10,
+      "derived_from": "walk-forward-window-evaluation",
+      "patch": {
+        "monte_carlo_runs": 1000,
+        "monte_carlo_block_size": 2,
+        "seed": 7
+      },
+      "sensitivity_variants": [
+        {
+          "variant_id": "larger-block",
+          "patch": {
+            "monte_carlo_block_size": 4
+          }
+        }
+      ],
+      "evidence_paths": [
+        "result.candidates[].monte_carlo.p05",
+        "result.candidates[].monte_carlo.median",
+        "result.candidates[].monte_carlo.p95",
+        "result.candidates[].monte_carlo.loss_probability"
+      ],
+      "interpretation_guardrails": [
+        "p05 is not the worst possible outcome.",
+        "median is not a forecast.",
+        "p95 is not an upside promise.",
+        "loss probability is conditional on the evidence and resampling model."
+      ]
+    }
+  ],
+  "delta_classifications": [
+    {
+      "id": "matched",
+      "definition": "Actual behavior agrees with the expected direction and scenario tolerance."
+    },
+    {
+      "id": "explainable_deviation",
+      "definition": "The direction is credible, but magnitude changed because the path, trade count, stops, or fills changed."
+    },
+    {
+      "id": "assumption_failure",
+      "definition": "The conclusion depends on an assumption the available data or model cannot validate."
+    },
+    {
+      "id": "data_quality_warning",
+      "definition": "Missing, fallback, stale, or insufficient evidence prevents a strong conclusion."
+    }
+  ],
+  "learner_deliverable": {
+    "type": "one_page_research_report",
+    "required_sections": [
+      "question",
+      "hypothesis",
+      "assumptions",
+      "baseline evidence",
+      "execution-cost delta",
+      "L2 fill evidence",
+      "window stability",
+      "Monte Carlo distribution",
+      "invalidation conditions",
+      "verdict",
+      "next falsifiable experiment",
+      "reproduction metadata"
+    ]
+  },
+  "platform_exports": {
+    "udemy": {
+      "runtime_minutes": 82,
+      "preview_segments": [
+        "cold open",
+        "research contract",
+        "L2 market fill"
+      ]
+    },
+    "pluralsight": {
+      "runtime_minutes": 14,
+      "segments": [
+        "L2 hand calculation",
+        "QuantForge execution story",
+        "expected actual delta",
+        "limit partial-fill variant"
+      ]
+    },
+    "linkedin_learning": {
+      "runtime_minutes": 9,
+      "title": "Why touching the best price does not mean your order filled there"
+    },
+    "youtube": {
+      "runtime_minutes": 16,
+      "title": "Your Backtest Is Lying About Fills — Here’s the Order-Book Proof",
+      "call_to_action": "Run the reproducible lab in QuantForge and export the research-report template."
+    },
+    "kdp": {
+      "chapter_titles": [
+        "A Backtest Is a Question, Not an Answer",
+        "Write a Trading Hypothesis That Can Fail",
+        "Execution Costs Are Part of the Strategy",
+        "What Candles Hide About Order Books",
+        "Partial Fills and Volume-Weighted Price",
+        "Does the Result Survive Time?",
+        "Monte Carlo Without False Confidence",
+        "Writing a Defensible Research Verdict"
+      ]
+    }
+  },
+  "acceptance": [
+    "Every lab can run from this manifest.",
+    "The two L2 examples pass golden tests.",
+    "Generated evidence replaces handwritten result values.",
+    "Guided and expert modes use identical calculations and source data.",
+    "Every export carries scenario version and evidence provenance.",
+    "The module never implies future profitability.",
+    "The current time-window feature is not mislabeled as full walk-forward optimization."
+  ]
+}
