@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import os
+from dataclasses import asdict
 from functools import lru_cache
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .engine import DeterministicReplayEngine, make_strategy
 from .events import EventDatasetCatalog, RecorderConfig, RecorderManager
 from .execution import HyperliquidTestnetAdapter, TestnetOrderRequest, TestnetSafetyGate
+from .execution_story import StoryMode, build_execution_story
+from .orderbook import OrderBookSnapshot, Side, simulate_order
 from .persistence import ExperimentConfig, ExperimentStore, enqueue_experiment
 
 router = APIRouter(prefix="/api/research", tags=["event research"])
@@ -28,6 +31,20 @@ class ReplayRequest(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     starting_cash: float = Field(default=100_000.0, gt=0)
     timer_interval_ms: int = Field(default=1_000, ge=1, le=3_600_000)
+
+
+class ExecutionStoryRequest(BaseModel):
+    snapshot: dict[str, Any]
+    side: str = "buy"
+    quantity: float = Field(gt=0)
+    limit_price: float | None = None
+    mode: StoryMode = StoryMode.GUIDED
+    intent: str = "Understand how the recorded order book would execute this order."
+    hypothesis: str = "The order should execute near the best displayed price."
+    assumptions: list[str] = Field(default_factory=list)
+    invalidation_conditions: list[str] = Field(default_factory=list)
+    hopes: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
 
 
 @router.get("/capabilities")
@@ -106,6 +123,14 @@ def create_experiment(config: ExperimentConfig) -> dict[str, Any]:
     return payload
 
 
+@router.get("/experiments")
+def list_experiments(limit: int = Query(default=25, ge=1, le=100)) -> list[dict[str, Any]]:
+    try:
+        return [record.model_dump(mode="json") for record in experiment_store().list_recent(limit)]
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Experiment store unavailable: {exc}") from exc
+
+
 @router.get("/experiments/{experiment_id}")
 def get_experiment(experiment_id: str) -> dict[str, Any]:
     try:
@@ -117,6 +142,39 @@ def get_experiment(experiment_id: str) -> dict[str, Any]:
 @router.get("/execution/safety")
 def execution_safety() -> dict[str, Any]:
     return TestnetSafetyGate().status()
+
+
+@router.post("/execution/story")
+def execution_story(request: ExecutionStoryRequest) -> dict[str, Any]:
+    try:
+        snapshot = OrderBookSnapshot.from_payload(request.snapshot)
+        side = Side(request.side)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid execution story request: {exc}") from exc
+
+    result = simulate_order(snapshot, side, request.quantity, request.limit_price)
+    story = build_execution_story(
+        snapshot,
+        side,
+        result,
+        intent=request.intent,
+        hypothesis=request.hypothesis,
+        assumptions=request.assumptions,
+        invalidation_conditions=request.invalidation_conditions,
+        hopes=request.hopes,
+        risks=request.risks,
+    )
+    return {
+        "execution": {
+            "requested_quantity": result.requested_quantity,
+            "filled_quantity": result.filled_quantity,
+            "remaining_quantity": result.remaining_quantity,
+            "average_price": result.average_price,
+            "status": result.status.value,
+            "fills": [asdict(fill) for fill in result.fills],
+        },
+        "story": story.render(request.mode),
+    }
 
 
 @router.post("/execution/testnet-order")

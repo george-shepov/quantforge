@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
+from sqlalchemy import JSON, DateTime, String, Text, create_engine, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from .engine import DeterministicReplayEngine, make_strategy, monte_carlo_resample, parameter_combinations, walk_forward_windows
 from .events import EventDatasetCatalog
@@ -36,9 +38,6 @@ class ExperimentView(BaseModel):
 
 class ExperimentStore:
     def __init__(self, database_url: str | None = None) -> None:
-        from sqlalchemy import JSON, DateTime, String, Text, create_engine
-        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
-
         class Base(DeclarativeBase):
             pass
 
@@ -71,6 +70,14 @@ class ExperimentStore:
             if not record:
                 raise KeyError(experiment_id)
             return self._view(record)
+
+    def list_recent(self, limit: int = 25) -> list[ExperimentView]:
+        safe_limit = max(1, min(limit, 100))
+        with self.Session() as session:
+            records = session.scalars(
+                select(self.Record).order_by(self.Record.created_at.desc()).limit(safe_limit)
+            ).all()
+            return [self._view(record) for record in records]
 
     def set_status(self, experiment_id: str, status: str, result: dict[str, Any] | None = None, error: str | None = None) -> ExperimentView:
         with self.Session.begin() as session:
