@@ -1,0 +1,41 @@
+{
+  "market": {
+    "exchange": "synthetic",
+    "symbol": "BTC",
+    "interval": "1h",
+    "limit": 1000,
+    "fallback_to_synthetic": false
+  },
+  "market_kind": "perp",
+  "starting_capital": 100000,
+  "strategy": {
+    "name": "ema_crossover",
+    "fast_period": 20,
+    "slow_period": 50,
+    "lookback": 20,
+    "entry_z": 1.5,
+    "exit_z": 0.25,
+    "breakout_period": 30
+  },
+  "execution": {
+    "order_type": "market",
+    "allocation": 0.25,
+    "leverage": 3,
+    "taker_fee_bps": 5,
+    "maker_fee_bps": 2,
+    "base_slippage_bps": 3,
+    "limit_offset_bps": 2,
+    "maintenance_margin_rate": 0.005,
+    "stop_loss_pct": 0.04,
+    "take_profit_pct": 0.08
+  },
+  "scenario": {
+    "name": "baseline",
+    "start_percent": 0.6,
+    "duration_bars": 24,
+    "shock_pct": -0.12,
+    "volatility_multiplier": 3,
+    "slippage_multiplier": 4,
+    "funding_rate_hourly": 0.00001
+  }
+}
