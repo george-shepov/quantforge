@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import { runBacktest } from './api'
 import { MetricGrid } from './components/MetricGrid'
@@ -21,6 +21,7 @@ export default function App() {
   const [runs, setRuns] = useState<BacktestResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const resultsRef = useRef<HTMLElement | null>(null)
 
   const status = useMemo(() => result ? `${result.source.toUpperCase()} · ${result.metrics.trade_count ?? 0} TRADES` : 'READY', [result])
 
@@ -35,6 +36,9 @@ export default function App() {
       const output = await runBacktest(config)
       setResult(output)
       setRuns((existing) => [output, ...existing].slice(0, 6))
+      if (window.matchMedia('(max-width: 900px)').matches) {
+        requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -43,63 +47,75 @@ export default function App() {
   }
 
   return (
-    <main>
+    <main className="app-shell">
       <header className="topbar">
-        <div><strong>QUANTFORGE</strong><span>CRYPTO STRATEGY LAB</span></div>
-        <div className="status"><i /> {status}</div>
+        <div className="brand"><strong>QUANTFORGE</strong><span>CRYPTO STRATEGY LAB</span></div>
+        <div className="status" aria-live="polite"><i /> {status}</div>
       </header>
 
       <div className="workspace">
-        <aside className="controls">
+        <aside className="controls" aria-label="Backtest configuration">
           <div className="panel-title"><span>EXPERIMENT</span><span>SIMULATION ONLY</span></div>
 
-          <Field label="Exchange">
-            <select value={config.market.exchange} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, exchange: e.target.value as RunConfig['market']['exchange'] })}>
-              <option value="hyperliquid">Hyperliquid</option><option value="bitmex">BitMEX</option><option value="synthetic">Synthetic</option>
-            </select>
-          </Field>
-          <div className="field-row">
-            <Field label="Symbol"><select value={config.market.symbol} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, symbol: e.target.value })}><option>BTC</option><option>ETH</option><option>SOL</option><option>HYPE</option></select></Field>
-            <Field label="Interval"><select value={config.market.interval} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, interval: e.target.value })}><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1d</option></select></Field>
-          </div>
-          <div className="field-row">
-            <Field label="Market"><select value={config.market_kind} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market_kind', e.target.value as RunConfig['market_kind'])}><option value="spot">Spot</option><option value="perp">Perpetual</option><option value="future">Future</option></select></Field>
-            <Field label="Bars"><input type="number" value={config.market.limit} onChange={(e: ChangeEvent<HTMLInputElement>) => patch('market', { ...config.market, limit: Number(e.target.value) })} /></Field>
-          </div>
+          <section className="control-group">
+            <div className="control-group-title">Market data</div>
+            <Field label="Exchange">
+              <select value={config.market.exchange} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, exchange: e.target.value as RunConfig['market']['exchange'] })}>
+                <option value="hyperliquid">Hyperliquid</option><option value="bitmex">BitMEX</option><option value="synthetic">Synthetic</option>
+              </select>
+            </Field>
+            <div className="field-row">
+              <Field label="Symbol"><select value={config.market.symbol} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, symbol: e.target.value })}><option>BTC</option><option>ETH</option><option>SOL</option><option>HYPE</option></select></Field>
+              <Field label="Interval"><select value={config.market.interval} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, interval: e.target.value })}><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1d</option></select></Field>
+            </div>
+            <div className="field-row">
+              <Field label="Market"><select value={config.market_kind} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market_kind', e.target.value as RunConfig['market_kind'])}><option value="spot">Spot</option><option value="perp">Perpetual</option><option value="future">Future</option></select></Field>
+              <Field label="Bars"><input inputMode="numeric" type="number" value={config.market.limit} onChange={(e: ChangeEvent<HTMLInputElement>) => patch('market', { ...config.market, limit: Number(e.target.value) })} /></Field>
+            </div>
+          </section>
 
-          <Field label="Strategy">
-            <select value={config.strategy.name} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('strategy', { ...config.strategy, name: e.target.value as StrategyName })}>
-              <option value="ema_crossover">EMA crossover</option><option value="mean_reversion">Mean reversion</option><option value="breakout">Breakout</option>
-            </select>
-          </Field>
-          {config.strategy.name === 'ema_crossover' && <div className="field-row"><NumberField label="Fast EMA" value={config.strategy.fast_period} onChange={(v) => patch('strategy', { ...config.strategy, fast_period: v })} /><NumberField label="Slow EMA" value={config.strategy.slow_period} onChange={(v) => patch('strategy', { ...config.strategy, slow_period: v })} /></div>}
-          {config.strategy.name === 'mean_reversion' && <div className="field-row"><NumberField label="Lookback" value={config.strategy.lookback} onChange={(v) => patch('strategy', { ...config.strategy, lookback: v })} /><NumberField label="Entry Z" value={config.strategy.entry_z} step="0.1" onChange={(v) => patch('strategy', { ...config.strategy, entry_z: v })} /></div>}
-          {config.strategy.name === 'breakout' && <NumberField label="Breakout period" value={config.strategy.breakout_period} onChange={(v) => patch('strategy', { ...config.strategy, breakout_period: v })} />}
+          <section className="control-group">
+            <div className="control-group-title">Strategy</div>
+            <Field label="Model">
+              <select value={config.strategy.name} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('strategy', { ...config.strategy, name: e.target.value as StrategyName })}>
+                <option value="ema_crossover">EMA crossover</option><option value="mean_reversion">Mean reversion</option><option value="breakout">Breakout</option>
+              </select>
+            </Field>
+            {config.strategy.name === 'ema_crossover' && <div className="field-row"><NumberField label="Fast EMA" value={config.strategy.fast_period} onChange={(v) => patch('strategy', { ...config.strategy, fast_period: v })} /><NumberField label="Slow EMA" value={config.strategy.slow_period} onChange={(v) => patch('strategy', { ...config.strategy, slow_period: v })} /></div>}
+            {config.strategy.name === 'mean_reversion' && <div className="field-row"><NumberField label="Lookback" value={config.strategy.lookback} onChange={(v) => patch('strategy', { ...config.strategy, lookback: v })} /><NumberField label="Entry Z" value={config.strategy.entry_z} step="0.1" onChange={(v) => patch('strategy', { ...config.strategy, entry_z: v })} /></div>}
+            {config.strategy.name === 'breakout' && <NumberField label="Breakout period" value={config.strategy.breakout_period} onChange={(v) => patch('strategy', { ...config.strategy, breakout_period: v })} />}
+          </section>
 
-          <div className="field-row">
-            <NumberField label="Allocation %" value={config.execution.allocation * 100} step="1" onChange={(v) => patch('execution', { ...config.execution, allocation: v / 100 })} />
-            <NumberField label="Leverage" value={config.market_kind === 'spot' ? 1 : config.execution.leverage} step="1" disabled={config.market_kind === 'spot'} onChange={(v) => patch('execution', { ...config.execution, leverage: v })} />
-          </div>
-          <div className="field-row">
-            <NumberField label="Fee bps" value={config.execution.taker_fee_bps} step="0.1" onChange={(v) => patch('execution', { ...config.execution, taker_fee_bps: v })} />
-            <NumberField label="Slippage bps" value={config.execution.base_slippage_bps} step="0.1" onChange={(v) => patch('execution', { ...config.execution, base_slippage_bps: v })} />
-          </div>
+          <section className="control-group">
+            <div className="control-group-title">Execution model</div>
+            <div className="field-row">
+              <NumberField label="Allocation %" value={config.execution.allocation * 100} step="1" onChange={(v) => patch('execution', { ...config.execution, allocation: v / 100 })} />
+              <NumberField label="Leverage" value={config.market_kind === 'spot' ? 1 : config.execution.leverage} step="1" disabled={config.market_kind === 'spot'} onChange={(v) => patch('execution', { ...config.execution, leverage: v })} />
+            </div>
+            <div className="field-row">
+              <NumberField label="Fee bps" value={config.execution.taker_fee_bps} step="0.1" onChange={(v) => patch('execution', { ...config.execution, taker_fee_bps: v })} />
+              <NumberField label="Slippage bps" value={config.execution.base_slippage_bps} step="0.1" onChange={(v) => patch('execution', { ...config.execution, base_slippage_bps: v })} />
+            </div>
+          </section>
 
-          <Field label="Stress scenario">
-            <select value={config.scenario.name} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('scenario', { ...config.scenario, name: e.target.value as ScenarioName })}>
-              <option value="baseline">Baseline</option><option value="flash_crash">Flash crash</option><option value="volatility_spike">Volatility spike</option><option value="liquidity_drought">Liquidity drought</option><option value="funding_squeeze">Funding squeeze</option>
-            </select>
-          </Field>
-          {config.scenario.name === 'flash_crash' && <NumberField label="Shock %" value={config.scenario.shock_pct * 100} step="1" onChange={(v) => patch('scenario', { ...config.scenario, shock_pct: v / 100 })} />}
-          {config.scenario.name === 'liquidity_drought' && <NumberField label="Slippage multiplier" value={config.scenario.slippage_multiplier} step="0.5" onChange={(v) => patch('scenario', { ...config.scenario, slippage_multiplier: v })} />}
-          {(config.scenario.name === 'volatility_spike' || config.scenario.name === 'funding_squeeze') && <NumberField label="Stress multiplier" value={config.scenario.volatility_multiplier} step="0.5" onChange={(v) => patch('scenario', { ...config.scenario, volatility_multiplier: v })} />}
+          <section className="control-group">
+            <div className="control-group-title">Stress test</div>
+            <Field label="Scenario">
+              <select value={config.scenario.name} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('scenario', { ...config.scenario, name: e.target.value as ScenarioName })}>
+                <option value="baseline">Baseline</option><option value="flash_crash">Flash crash</option><option value="volatility_spike">Volatility spike</option><option value="liquidity_drought">Liquidity drought</option><option value="funding_squeeze">Funding squeeze</option>
+              </select>
+            </Field>
+            {config.scenario.name === 'flash_crash' && <NumberField label="Shock %" value={config.scenario.shock_pct * 100} step="1" onChange={(v) => patch('scenario', { ...config.scenario, shock_pct: v / 100 })} />}
+            {config.scenario.name === 'liquidity_drought' && <NumberField label="Slippage multiplier" value={config.scenario.slippage_multiplier} step="0.5" onChange={(v) => patch('scenario', { ...config.scenario, slippage_multiplier: v })} />}
+            {(config.scenario.name === 'volatility_spike' || config.scenario.name === 'funding_squeeze') && <NumberField label="Stress multiplier" value={config.scenario.volatility_multiplier} step="0.5" onChange={(v) => patch('scenario', { ...config.scenario, volatility_multiplier: v })} />}
+          </section>
 
           <button className="run" onClick={execute} disabled={loading}>{loading ? 'RUNNING…' : 'RUN BACKTEST'}</button>
-          {error && <div className="error">{error}</div>}
+          {error && <div className="error" role="alert">{error}</div>}
           <p className="safety">No wallet connection. No exchange keys. No live orders.</p>
         </aside>
 
-        <section className="results">
+        <section className="results" ref={resultsRef} tabIndex={-1}>
           {result ? (
             <>
               {result.warnings.length > 0 && <div className="warnings">{result.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
@@ -117,13 +133,20 @@ export default function App() {
 
         <aside className="history">
           <div className="panel-title"><span>RECENT RUNS</span><span>LOCAL SESSION</span></div>
-          {runs.length === 0 && <p className="muted">Runs appear here for side-by-side inspection.</p>}
-          {runs.map((run, index) => (
-            <button className="run-card" key={run.run_id} onClick={() => setResult(run)}>
-              <span>RUN {runs.length - index}</span><strong className={(run.metrics.total_return_pct ?? 0) >= 0 ? 'positive' : 'negative'}>{(run.metrics.total_return_pct ?? 0).toFixed(2)}%</strong>
-              <small>{run.source} · {run.metrics.trade_count} trades · DD {(run.metrics.max_drawdown_pct ?? 0).toFixed(1)}%</small>
-            </button>
-          ))}
+          <div className="run-list">
+            {runs.length === 0 && <p className="muted">Runs appear here for side-by-side inspection.</p>}
+            {runs.map((run, index) => (
+              <button className="run-card" key={run.run_id} onClick={() => {
+                setResult(run)
+                if (window.matchMedia('(max-width: 900px)').matches) {
+                  requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+                }
+              }}>
+                <span>RUN {runs.length - index}</span><strong className={(run.metrics.total_return_pct ?? 0) >= 0 ? 'positive' : 'negative'}>{(run.metrics.total_return_pct ?? 0).toFixed(2)}%</strong>
+                <small>{run.source} · {run.metrics.trade_count} trades · DD {(run.metrics.max_drawdown_pct ?? 0).toFixed(1)}%</small>
+              </button>
+            ))}
+          </div>
         </aside>
       </div>
     </main>
@@ -135,5 +158,5 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function NumberField({ label, value, onChange, step = '1', disabled = false }: { label: string; value: number; onChange: (v: number) => void; step?: string; disabled?: boolean }) {
-  return <Field label={label}><input type="number" value={value} step={step} disabled={disabled} onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value))} /></Field>
+  return <Field label={label}><input inputMode="decimal" type="number" value={value} step={step} disabled={disabled} onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value))} /></Field>
 }

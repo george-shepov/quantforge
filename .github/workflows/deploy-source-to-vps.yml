@@ -41,6 +41,7 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_DEPLOYMENT_DIR: ${{ secrets.VPS_DEPLOYMENT_DIR }}
         run: |
           set -euo pipefail
@@ -48,7 +49,7 @@ jobs:
           : "${VPS_USER:?VPS_USER is required}"
           : "${VPS_DEPLOYMENT_DIR:?VPS_DEPLOYMENT_DIR is required}"
 
-          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -p "${VPS_PORT:-22}")
           release="$VPS_DEPLOYMENT_DIR/releases/$GITHUB_SHA"
 
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
@@ -70,14 +71,50 @@ jobs:
         run: |
           set -euo pipefail
           : "${QUANTFORGE_DEPLOY_DIR:?QUANTFORGE_DEPLOY_DIR is required}"
-          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -p "${VPS_PORT:-22}")
 
-          ssh "${ssh_opts[@]}" -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "mkdir -p '$QUANTFORGE_DEPLOY_DIR'"
 
           tar --exclude-vcs --exclude='./.github' -czf - . | \
-            ssh "${ssh_opts[@]}" -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "set -e; tar -xzf - -C '$QUANTFORGE_DEPLOY_DIR'"
 
-          ssh "${ssh_opts[@]}" -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
-            "set -e; cd '$QUANTFORGE_DEPLOY_DIR'; if [ ! -s .env ]; then umask 077; printf 'POSTGRES_PASSWORD=%s\\n' \"\$(openssl rand -hex 32)\" > .env; printf '%s\\n' 'QUANTFORGE_ALLOW_NETWORK=true' 'QUANTFORGE_TESTNET_EXECUTION_ENABLED=false' 'QUANTFORGE_EXECUTION_NETWORK=disabled' 'QUANTFORGE_TESTNET_MAX_NOTIONAL=100' >> .env; fi; docker network inspect shepov_edge >/dev/null 2>&1 || docker network create shepov_edge; docker compose -p quantforge up -d --build --remove-orphans; docker compose -p quantforge exec -T api python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/api/health')\"; docker exec quantforge_terminal wget -qO- http://127.0.0.1/api/health | grep -q quantforge-api"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "QUANTFORGE_DEPLOY_DIR='$QUANTFORGE_DEPLOY_DIR' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          DEPLOY_DIR="$QUANTFORGE_DEPLOY_DIR"
+          ENV_FILE="$DEPLOY_DIR/.env"
+          cd "$DEPLOY_DIR"
+
+          if [ ! -s "$ENV_FILE" ]; then
+            umask 077
+            printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" > "$ENV_FILE"
+            printf '%s\n' \
+              'QUANTFORGE_ALLOW_NETWORK=true' \
+              'QUANTFORGE_TESTNET_EXECUTION_ENABLED=false' \
+              'QUANTFORGE_EXECUTION_NETWORK=disabled' \
+              'QUANTFORGE_TESTNET_MAX_NOTIONAL=100' >> "$ENV_FILE"
+          fi
+          chmod 600 "$ENV_FILE"
+
+          if [ -x /opt/shepov-vault/bin/import-legacy-app-secrets ] && \
+             [ -x /opt/shepov-vault/bin/apply-app-secrets ] && \
+             docker inspect --format '{{.State.Running}}' shepov_secrets_vault 2>/dev/null | grep -qx true; then
+            /opt/shepov-vault/bin/import-legacy-app-secrets quantforge \
+              --policy-file /opt/shepov-vault/app-secret-policies.json \
+              --source-env "$ENV_FILE"
+            /opt/shepov-vault/bin/apply-app-secrets quantforge \
+              --policy-file /opt/shepov-vault/app-secret-policies.json \
+              --compatibility-target "$ENV_FILE"
+            echo "QuantForge secrets loaded from the standalone vault policy."
+          else
+            echo "WARNING: standalone vault broker is not installed; retaining the existing mode-0600 QuantForge environment file." >&2
+          fi
+
+          docker network inspect shepov_edge >/dev/null 2>&1 || docker network create shepov_edge
+          docker compose -p quantforge up -d --build --remove-orphans
+          docker compose -p quantforge exec -T api \
+            python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/api/health')"
+          docker exec quantforge_terminal wget -qO- http://127.0.0.1/api/health | grep -q quantforge-api
+          REMOTE

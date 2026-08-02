@@ -1,0 +1,57 @@
+name: Validate Vault Adapter
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/deploy-source-to-vps.yml
+      - .github/workflows/validate-vault-adapter.yml
+      - .env.example
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Parse workflow YAML
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in (
+              Path('.github/workflows/deploy-source-to-vps.yml'),
+              Path('.github/workflows/validate-vault-adapter.yml'),
+          ):
+              payload = yaml.safe_load(path.read_text(encoding='utf-8'))
+              if not isinstance(payload, dict) or 'jobs' not in payload:
+                  raise SystemExit(f'Invalid workflow structure: {path}')
+          PY
+
+      - name: Confirm vault migration and delivery gates
+        run: |
+          set -Eeuo pipefail
+          workflow=.github/workflows/deploy-source-to-vps.yml
+          grep -q '/opt/shepov-vault/bin/import-legacy-app-secrets quantforge' "$workflow"
+          grep -q -- '--source-env "$ENV_FILE"' "$workflow"
+          grep -q '/opt/shepov-vault/bin/apply-app-secrets quantforge' "$workflow"
+          grep -q -- '--compatibility-target "$ENV_FILE"' "$workflow"
+          grep -q 'shepov_secrets_vault' "$workflow"
+          grep -q 'chmod 600 "$ENV_FILE"' "$workflow"
+
+      - name: Confirm current secret contract remains documented
+        run: |
+          set -Eeuo pipefail
+          grep -q '^POSTGRES_PASSWORD=' .env.example
+          grep -q '^QUANTFORGE_SAFETY_TOKEN=' .env.example
+          grep -q '^HYPERLIQUID_TESTNET_PRIVATE_KEY=' .env.example
+          grep -q '^HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS=' .env.example
