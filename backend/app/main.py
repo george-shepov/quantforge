@@ -52,7 +52,7 @@ async def catalog() -> dict:
         "exchanges": exchanges,
         "exchangeEnvironments": environments,
         "symbols": ["BTC", "ETH", "SOL", "HYPE"],
-        "intervals": ["5m", "15m", "1h", "4h", "1d"],
+        "intervals": ["1m", "5m", "15m", "1h", "4h", "1d"],
         "marketKinds": ["spot", "perp", "future"],
         "strategies": ["ema_crossover", "mean_reversion", "breakout"],
         "eventStrategies": ["cross_exchange_arbitrage", "inventory_market_making"],

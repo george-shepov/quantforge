@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 
 import httpx
 
@@ -39,22 +40,34 @@ class WhiteBITAdapter(ExchangeAdapter):
         except (httpx.HTTPError, ValueError) as exc:
             raise ExchangeAdapterError(f"WhiteBIT market-data request failed: {exc}") from exc
 
-        rows = payload.get("result", payload) if isinstance(payload, dict) else payload
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, dict):
+            rows = payload.get("result", payload.get("data", []))
+        else:
+            rows = []
         candles: list[Candle] = []
-        for row in rows or []:
-            if isinstance(row, dict):
-                timestamp = row.get("time") or row.get("timestamp")
-                values = (row.get("open"), row.get("high"), row.get("low"), row.get("close"), row.get("volume", 0))
-            else:
-                timestamp = row[0]
-                values = (row[1], row[2], row[3], row[4], row[5] if len(row) > 5 else 0)
-            candles.append(
-                Candle(
-                    timestamp=datetime.fromtimestamp(float(timestamp), tz=timezone.utc),
-                    open=float(values[0]), high=float(values[1]), low=float(values[2]),
-                    close=float(values[3]), volume=float(values[4]),
+        try:
+            for row in rows or []:
+                if isinstance(row, dict):
+                    timestamp = row.get("time") or row.get("timestamp")
+                    values = (row["open"], row["high"], row["low"], row["close"], row.get("volume", 0))
+                else:
+                    timestamp = row[0]
+                    # WhiteBIT arrays are [time, open, close, high, low, volume].
+                    values = (row[1], row[3], row[4], row[2], row[5] if len(row) > 5 else 0)
+                timestamp_value = float(timestamp)
+                if timestamp_value > 100_000_000_000:
+                    timestamp_value /= 1000
+                candles.append(
+                    Candle(
+                        timestamp=datetime.fromtimestamp(timestamp_value, tz=timezone.utc),
+                        open=float(values[0]), high=float(values[1]), low=float(values[2]),
+                        close=float(values[3]), volume=float(values[4]),
+                    )
                 )
-            )
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ExchangeAdapterError("Unexpected WhiteBIT candle response") from exc
         candles.sort(key=lambda candle: candle.timestamp)
         if len(candles) < 20:
             raise ExchangeAdapterError("WhiteBIT returned too few candles")
@@ -80,9 +93,14 @@ class WhiteBITAdapter(ExchangeAdapter):
 
 
 def _normalize_symbol(symbol: str, demo: bool = False) -> str:
-    base = symbol.upper().replace("-PERP", "").replace("/", "_").replace("-", "_")
-    if "_" not in base:
-        base = f"{base}_USDT"
+    parts = [part for part in re.split(r"[/_:\-]", symbol.upper()) if part and part not in {"PERP", "PERPETUAL"}]
+    compact = parts[0] if len(parts) == 1 else ""
+    if compact.endswith(("USDT", "USDC")):
+        base = f"{compact[:-4]}_{compact[-4:]}"
+    else:
+        base = "_".join(parts[:2]) if len(parts) > 1 else f"{compact or symbol.upper()}_USDT"
+    if len(parts) > 1 and parts[1] not in {"USDT", "USDC", "BTC", "EUR"}:
+        base = f"{parts[0]}_USDT"
     if demo:
         left, right = base.split("_", 1)
         left = left if left.startswith("D") else f"D{left}"

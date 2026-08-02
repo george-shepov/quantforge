@@ -157,7 +157,7 @@ Actual testnet submission additionally requires the environment gates and safety
 
 The original MVP remains available at `POST /api/backtests/run` with:
 
-- Hyperliquid and BitMEX public candle adapters
+- Hyperliquid, Bybit, BitMEX, and WhiteBIT public candle adapters
 - Deterministic synthetic fallback
 - Spot, perpetual, and futures modes
 - Market and limit entries
