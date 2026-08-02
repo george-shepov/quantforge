@@ -2,18 +2,34 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from app.engine import run_backtest
 from app.exchanges import get_exchange_adapter
 from app.exchanges.base import ExchangeAdapterError
 from app.exchanges.environment import configured_environment, endpoints_for
 from app.exchanges.synthetic import SyntheticAdapter
+from app.metering import (
+    MeteredApiMiddleware,
+    MeteringStore,
+    require_admin_token,
+    require_api_principal,
+)
 from app.models import BacktestRequest, BacktestResponse
 from app.research.api import router as research_router
 
-app = FastAPI(title="QuantForge API", version="0.3.0")
+
+class ApiKeyCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    plan: str = Field(default="developer", min_length=1, max_length=40)
+    monthly_quota: int = Field(default=10_000, ge=1, le=100_000_000)
+    rate_limit_per_minute: int = Field(default=60, ge=1, le=100_000)
+
+
+metering_store = MeteringStore()
+app = FastAPI(title="QuantForge API", version="0.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:4173", "*"],
@@ -21,12 +37,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(MeteredApiMiddleware, store=metering_store)
 app.include_router(research_router)
 
 
 @app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "quantforge-api", "version": "0.3.0"}
+async def health() -> dict[str, str | bool]:
+    return {
+        "status": "ok",
+        "service": "quantforge-api",
+        "version": "0.4.0",
+        "meteredApiEnabled": os.getenv(
+            "QUANTFORGE_METERED_API_ENABLED", "false"
+        ).lower()
+        == "true",
+    }
+
+
+@app.post("/api/developer/keys", status_code=201)
+async def create_api_key(request: Request, payload: ApiKeyCreateRequest) -> dict:
+    require_admin_token(request)
+    return metering_store.create_key(
+        name=payload.name,
+        plan=payload.plan,
+        monthly_quota=payload.monthly_quota,
+        rate_limit_per_minute=payload.rate_limit_per_minute,
+    )
+
+
+@app.get("/api/developer/usage")
+async def developer_usage(request: Request) -> dict:
+    principal = require_api_principal(request, metering_store)
+    return metering_store.usage_summary(principal)
 
 
 @app.get("/api/catalog")
@@ -58,6 +100,12 @@ async def catalog() -> dict:
         "eventStrategies": ["cross_exchange_arbitrage", "inventory_market_making"],
         "scenarios": ["baseline", "flash_crash", "volatility_spike", "liquidity_drought", "funding_squeeze"],
         "mainnetOrderSubmission": False,
+        "meteredApi": {
+            "enabled": os.getenv("QUANTFORGE_METERED_API_ENABLED", "false").lower()
+            == "true",
+            "apiKeyHeader": "X-QuantForge-API-Key",
+            "usageEndpoint": "/api/developer/usage",
+        },
     }
 
 
