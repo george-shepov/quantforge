@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 
 import httpx
 
@@ -43,18 +44,21 @@ class BybitAdapter(ExchangeAdapter):
         if payload.get("retCode") != 0:
             raise ExchangeAdapterError(f"Bybit rejected market-data request: {payload.get('retMsg', 'unknown error')}")
 
-        rows = payload.get("result", {}).get("list", [])
-        candles = [
-            Candle(
-                timestamp=datetime.fromtimestamp(float(row[0]) / 1000, tz=timezone.utc),
-                open=float(row[1]),
-                high=float(row[2]),
-                low=float(row[3]),
-                close=float(row[4]),
-                volume=float(row[5]),
-            )
-            for row in reversed(rows)
-        ]
+        try:
+            rows = payload["result"]["list"]
+            candles = [
+                Candle(
+                    timestamp=datetime.fromtimestamp(float(row[0]) / 1000, tz=timezone.utc),
+                    open=float(row[1]),
+                    high=float(row[2]),
+                    low=float(row[3]),
+                    close=float(row[4]),
+                    volume=float(row[5]),
+                )
+                for row in reversed(rows)
+            ]
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ExchangeAdapterError("Unexpected Bybit candle response") from exc
         if len(candles) < 20:
             raise ExchangeAdapterError("Bybit returned too few candles")
         return candles[-request.limit :]
@@ -82,5 +86,9 @@ class BybitAdapter(ExchangeAdapter):
 
 
 def _normalize_symbol(symbol: str) -> str:
-    value = symbol.upper().replace("-PERP", "").replace("/", "").replace("_", "")
-    return value if value.endswith("USDT") else f"{value}USDT"
+    parts = [part for part in re.split(r"[/_:\-]", symbol.upper()) if part and part not in {"PERP", "PERPETUAL"}]
+    if len(parts) > 1:
+        base, quote = parts[0], next((part for part in parts[1:] if part in {"USDT", "USDC"}), "USDT")
+        return f"{base}{quote}"
+    value = parts[0] if parts else symbol.upper()
+    return value if value.endswith(("USDT", "USDC")) else f"{value}USDT"

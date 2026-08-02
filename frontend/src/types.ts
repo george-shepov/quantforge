@@ -1,6 +1,6 @@
 export type StrategyName = 'ema_crossover' | 'mean_reversion' | 'breakout'
 export type ScenarioName = 'baseline' | 'flash_crash' | 'volatility_spike' | 'liquidity_drought' | 'funding_squeeze'
-export type ExchangeName = 'hyperliquid' | 'bitmex' | 'synthetic'
+export type ExchangeName = 'hyperliquid' | 'bybit' | 'bitmex' | 'whitebit' | 'synthetic'
 export type MarketKind = 'spot' | 'perp' | 'future'
 
 export interface RunConfig {

@@ -61,12 +61,12 @@ export default function App() {
             <div className="control-group-title">Market data</div>
             <Field label="Exchange">
               <select value={config.market.exchange} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, exchange: e.target.value as RunConfig['market']['exchange'] })}>
-                <option value="hyperliquid">Hyperliquid</option><option value="bitmex">BitMEX</option><option value="synthetic">Synthetic</option>
+                <option value="hyperliquid">Hyperliquid</option><option value="bybit">Bybit</option><option value="bitmex">BitMEX</option><option value="whitebit">WhiteBIT</option><option value="synthetic">Synthetic</option>
               </select>
             </Field>
             <div className="field-row">
               <Field label="Symbol"><select value={config.market.symbol} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, symbol: e.target.value })}><option>BTC</option><option>ETH</option><option>SOL</option><option>HYPE</option></select></Field>
-              <Field label="Interval"><select value={config.market.interval} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, interval: e.target.value })}><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1d</option></select></Field>
+              <Field label="Interval"><select value={config.market.interval} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market', { ...config.market, interval: e.target.value })}><option>1m</option><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option>1d</option></select></Field>
             </div>
             <div className="field-row">
               <Field label="Market"><select value={config.market_kind} onChange={(e: ChangeEvent<HTMLSelectElement>) => patch('market_kind', e.target.value as RunConfig['market_kind'])}><option value="spot">Spot</option><option value="perp">Perpetual</option><option value="future">Future</option></select></Field>
