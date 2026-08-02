@@ -1,5 +1,7 @@
 import type {
   BacktestResponse,
+  ArbitrageScanRequest,
+  ArbitrageScanResponse,
   CatalogResponse,
   DatasetManifest,
   ExecutionStoryRequest,
@@ -66,6 +68,10 @@ export function listDatasets() {
 
 export function replayDataset(config: ReplayRequest) {
   return request<ReplayResponse>('/api/research/replay', { method: 'POST', body: JSON.stringify(config) })
+}
+
+export function scanArbitrage(config: ArbitrageScanRequest) {
+  return request<ArbitrageScanResponse>('/api/research/arbitrage/scan', { method: 'POST', body: JSON.stringify(config) })
 }
 
 export function queueExperiment(config: ExperimentConfig) {

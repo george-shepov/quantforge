@@ -73,6 +73,12 @@ same gross-edge, two-leg fee, and minimum-edge calculation used by replay. Every
 the available quantity, estimated profit, stable opportunity ID, arithmetic explanation, and
 an explicit rejection reason. The projection is analysis-only and has no order-submission path.
 
+The dedicated **Arbitrage** workspace renders that projection as a Coinbase Pro-density
+opportunity tape with responsive mobile cards. Build, Guided, Expert, and Watch & Learn modes
+share the exact same response data: Build exposes assumptions, Guided teaches the decision,
+Expert preserves compact raw evidence, and Watch & Learn advances through replay candidates as
+a lesson. Accepted and rejected filters never remove the explanation attached to a candidate.
+
 ### Experiment system
 
 Experiments support:
