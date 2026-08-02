@@ -72,6 +72,16 @@ class ExperimentStore:
                 raise KeyError(experiment_id)
             return self._view(record)
 
+    def list_recent(self, limit: int = 25) -> list[ExperimentView]:
+        from sqlalchemy import select
+
+        safe_limit = max(1, min(limit, 100))
+        with self.Session() as session:
+            records = session.scalars(
+                select(self.Record).order_by(self.Record.created_at.desc()).limit(safe_limit)
+            ).all()
+            return [self._view(record) for record in records]
+
     def set_status(self, experiment_id: str, status: str, result: dict[str, Any] | None = None, error: str | None = None) -> ExperimentView:
         with self.Session.begin() as session:
             record = session.get(self.Record, experiment_id)
