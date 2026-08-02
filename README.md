@@ -160,6 +160,9 @@ The scanner deliberately includes rejected candidates. `explanation` shows the a
 `rejection_reasons` states why a candidate failed the configured threshold. Its response safety
 metadata always reports `order_submission: false`.
 
+See [Arbitrage Lab Phase 1](docs/arbitrage-lab-phase-1.md) for the calculation contract,
+presentation modes, course-engine mapping, safety boundary, and acceptance matrix.
+
 ## Queue an experiment
 
 ```bash
