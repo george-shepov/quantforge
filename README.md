@@ -67,6 +67,12 @@ The event engine includes:
 - Inventory-skewed market-making quotes
 - Seeded queue-ahead and trade-through fill simulation
 
+Phase 1 of the Arbitrage Lab adds a deterministic decision projection over the existing
+`cross_exchange_arbitrage` strategy. It reports accepted and rejected venue pairs with the
+same gross-edge, two-leg fee, and minimum-edge calculation used by replay. Every row includes
+the available quantity, estimated profit, stable opportunity ID, arithmetic explanation, and
+an explicit rejection reason. The projection is analysis-only and has no order-submission path.
+
 ### Experiment system
 
 Experiments support:
@@ -125,6 +131,24 @@ curl -X POST http://localhost:8008/api/research/replay \
     "timer_interval_ms":1000
   }'
 ```
+
+## Arbitrage Lab scanner
+
+```bash
+curl -X POST http://localhost:8008/api/research/arbitrage/scan \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dataset_id":"<dataset-id>",
+    "min_edge_bps":5,
+    "fee_bps":2,
+    "max_quantity":1,
+    "limit":500
+  }'
+```
+
+The scanner deliberately includes rejected candidates. `explanation` shows the arithmetic and
+`rejection_reasons` states why a candidate failed the configured threshold. Its response safety
+metadata always reports `order_submission: false`.
 
 ## Queue an experiment
 
