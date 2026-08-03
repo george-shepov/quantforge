@@ -96,7 +96,7 @@ def datasets() -> list[dict[str, Any]]:
 def dataset(dataset_id: str) -> dict[str, Any]:
     try:
         return catalog.get(dataset_id).model_dump(mode="json")
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=404, detail="Dataset not found") from exc
 
 
