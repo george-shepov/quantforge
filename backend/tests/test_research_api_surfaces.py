@@ -32,6 +32,7 @@ def test_blocked_live_exchange_falls_back_with_an_explicit_warning(monkeypatch):
                 "Bybit market-data request was blocked with HTTP 403; use a Bybit-permitted region."
             )
 
+    monkeypatch.setenv("QUANTFORGE_ALLOW_NETWORK", "true")
     monkeypatch.setattr(main_api, "get_exchange_adapter", lambda _exchange: RegionBlockedAdapter())
     response = client.post(
         "/api/backtests/run",
