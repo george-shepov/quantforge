@@ -397,6 +397,14 @@ function BacktestWorkspace({
           <span>CANDLE BACKTEST</span>
           <span>SIMULATION ONLY</span>
         </div>
+        <button
+          className="run backtest-run"
+          onClick={() => void execute()}
+          disabled={loading}
+        >
+          {loading ? "RUNNING…" : "RUN BACKTEST"}
+        </button>
+        {error && <div className="error">{error}</div>}
         <section className="control-group">
           <div className="control-group-title">Market data</div>
           <Field label="Exchange">
@@ -593,14 +601,6 @@ function BacktestWorkspace({
             </select>
           </Field>
         </section>
-        <button
-          className="run"
-          onClick={() => void execute()}
-          disabled={loading}
-        >
-          {loading ? "RUNNING…" : "RUN BACKTEST"}
-        </button>
-        {error && <div className="error">{error}</div>}
       </aside>
       <section className="results" ref={resultsRef}>
         {result ? (

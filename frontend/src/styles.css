@@ -82,6 +82,7 @@ input:disabled { color: #596573; opacity: .75; }
 .run:hover:not(:disabled) { filter: brightness(1.05); }
 .run:active:not(:disabled) { transform: translateY(1px); }
 .run:disabled { opacity: .55; }
+.backtest-run { margin: 0 0 12px; }
 .safety, .muted { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .error { color: var(--negative); font-size: 11px; border: 1px solid #5e2e33; border-radius: 3px; padding: 9px; margin-top: 10px; background: rgba(94, 46, 51, .12); }
 .warnings { display: grid; gap: 4px; margin-bottom: 10px; padding: 9px; border: 1px solid #5f5524; border-radius: 3px; color: #d8c86d; font-size: 10px; background: rgba(95, 85, 36, .1); }
@@ -144,6 +145,11 @@ th, td { padding: 8px; border-bottom: 1px solid #1d2630; text-align: right; whit
     min-height: 50px;
     border-radius: 8px;
     box-shadow: 0 9px 28px rgba(0, 0, 0, .55);
+  }
+  .backtest-run {
+    position: static;
+    bottom: auto;
+    box-shadow: none;
   }
   .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 5px; overflow: hidden; }
   .chart-shell, .table-panel { border-radius: 7px; }
