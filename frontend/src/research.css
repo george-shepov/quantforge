@@ -22,6 +22,9 @@
 .research-workspace { min-height: calc(100vh - 145px); grid-template-columns: 300px minmax(0, 1fr); }
 .page-workspace { width: min(1500px, 100%); margin: 0 auto; padding: 16px; }
 .two-column-page { display: grid; grid-template-columns: minmax(280px, 390px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.arbitrage-workspace { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.arbitrage-controls { position: sticky; top: 146px; }
+.arbitrage-results { min-width: 0; }
 .experiment-layout { display: grid; grid-template-columns: minmax(300px, 430px) minmax(0, 1fr); gap: 14px; align-items: start; }
 .surface-card { min-width: 0; border: 1px solid var(--line); border-radius: 5px; padding: 14px; background: var(--panel); }
 .sticky-card { position: sticky; top: 146px; }
@@ -118,6 +121,13 @@ textarea:focus { border-color: #718197; }
 .kind-experiment { background: #d8c86d; }
 .kind-story { background: var(--positive); }
 .compact-empty { min-height: 260px; }
+.guided-callout { margin-bottom: 14px; padding: 12px; border-left: 3px solid var(--accent); color: #cbd5df; background: rgba(216, 255, 85, .05); font-size: 10px; line-height: 1.6; }
+.guided-callout strong { color: var(--accent); }
+.guided-callout p { margin: 6px 0 0; }
+.arbitrage-table { overflow: hidden; }
+.watch-card { min-height: 300px; border: 1px solid #202b36; border-radius: 4px; padding: 14px; background: #090f15; }
+.watch-card h3 { margin: 28px 0 8px; color: var(--accent); font-size: 18px; }
+.watch-card p { color: #c0cad5; font-size: 11px; line-height: 1.7; }
 
 @media (max-width: 1100px) {
   .research-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -129,7 +139,7 @@ textarea:focus { border-color: #718197; }
   .workspace-tabs { top: calc(58px + env(safe-area-inset-top)); }
   .research-workspace { display: flex; flex-direction: column; }
   .two-column-page, .experiment-layout, .system-grid { display: grid; grid-template-columns: 1fr; }
-  .sticky-card { position: static; }
+  .sticky-card, .arbitrage-controls { position: static; }
   .full-span { grid-column: auto; }
   .surface-card { border-radius: 7px; }
   .environment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -107,7 +107,8 @@ def replay(request: ReplayRequest) -> dict[str, Any]:
         strategy = make_strategy(request.strategy, request.parameters)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result = DeterministicReplayEngine(request.timer_interval_ms).run(events, strategy, request.starting_cash)
+    fee_bps = float(request.parameters.get("fee_bps", 2.0))
+    result = DeterministicReplayEngine(request.timer_interval_ms, fee_bps=fee_bps).run(events, strategy, request.starting_cash)
     return result.model_dump(mode="json")
 
 

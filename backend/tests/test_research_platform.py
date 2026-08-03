@@ -5,6 +5,7 @@ from app.research.engine import (
     CrossExchangeArbitrageEngine,
     InventoryMarketMaker,
     monte_carlo_resample,
+    pair_arbitrage_intents,
     parameter_combinations,
     walk_forward_windows,
 )
@@ -41,6 +42,32 @@ def test_cross_exchange_arbitrage_detects_net_edge() -> None:
     assert opportunities[0].buy_exchange == "a"
     assert opportunities[0].sell_exchange == "b"
     assert opportunities[0].quantity == 2
+
+
+def test_arbitrage_intents_pair_deterministically_and_present_expected_profit() -> None:
+    intents = [
+        {"exchange": "sell-venue", "symbol": "BTC", "side": "sell", "quantity": 2, "limit_price": 101, "filled": True, "timestamp_ns": 10, "metadata": {"edge_bps": 80}},
+        {"exchange": "buy-venue", "symbol": "BTC", "side": "buy", "quantity": 1.5, "limit_price": 100, "filled": True, "timestamp_ns": 10, "metadata": {"edge_bps": 80}},
+    ]
+
+    rows = pair_arbitrage_intents(intents, fee_bps=2)
+
+    assert rows == [
+        {
+            "timestamp_ns": 10,
+            "symbol": "BTC",
+            "buy_venue": "buy-venue",
+            "sell_venue": "sell-venue",
+            "buy_price": 100.0,
+            "sell_price": 101.0,
+            "quantity": 1.5,
+            "gross_edge_bps": 100.0,
+            "expected_edge_bps": 80.0,
+            "estimated_profit": 1.2,
+            "buy_filled": True,
+            "sell_filled": True,
+        }
+    ]
 
 
 def test_inventory_quotes_skew_away_from_long_inventory() -> None:

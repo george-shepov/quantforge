@@ -79,7 +79,7 @@ const defaultStoryRequest: ExecutionStoryRequest = {
 }
 
 const tabs: Array<[WorkspaceName, string]> = [
-  ['backtest', 'Backtest'], ['recordings', 'Record'], ['replay', 'Replay'], ['experiments', 'Experiments'],
+  ['backtest', 'Backtest'], ['recordings', 'Record'], ['replay', 'Replay'], ['arbitrage', 'Arbitrage'], ['experiments', 'Experiments'],
   ['manual', 'Trading manual'], ['system', 'System'], ['history', 'History'],
 ]
 
@@ -153,6 +153,7 @@ export default function App() {
       {workspace === 'backtest' && <BacktestWorkspace catalog={catalog} remember={remember} />}
       {workspace === 'recordings' && <RecordingWorkspace recordings={recordings} datasets={datasets} onChanged={refreshPlatform} />}
       {workspace === 'replay' && <ReplayWorkspace datasets={datasets} remember={remember} />}
+      {workspace === 'arbitrage' && <ArbitrageWorkspace datasets={datasets} remember={remember} />}
       {workspace === 'experiments' && <ExperimentWorkspace datasets={datasets} experiments={experiments} onChanged={refreshPlatform} remember={remember} />}
       {workspace === 'manual' && <ManualWorkspace remember={remember} />}
       {workspace === 'system' && <SystemWorkspace catalog={catalog} capabilities={capabilities} safety={safety} />}
@@ -281,6 +282,125 @@ function ReplayWorkspace({ datasets, remember }: { datasets: DatasetManifest[]; 
 function ReplayResults({ result }: { result: ReplayResponse }) {
   const chart = result.equity_curve.map((point) => ({ ...point, label: new Date(point.timestamp_ns / 1_000_000).toLocaleTimeString() }))
   return <><div className="section-heading"><div><span>REPLAY RESULT</span><h2>{result.strategy.replaceAll('_', ' ')}</h2></div><strong className={result.return_pct >= 0 ? 'positive' : 'negative'}>{result.return_pct.toFixed(2)}%</strong></div><div className="research-metric-grid"><Metric label="Final equity" value={money(result.final_equity)} /><Metric label="Max drawdown" value={`${result.max_drawdown_pct.toFixed(2)}%`} /><Metric label="Events" value={result.event_count.toLocaleString()} /><Metric label="Timers" value={result.timer_count.toLocaleString()} /><Metric label="Intents" value={result.order_intent_count.toLocaleString()} /><Metric label="Fills" value={result.fill_count.toLocaleString()} /></div><div className="chart-shell"><div className="panel-title"><span>REPLAY EQUITY</span><span>{chart.length} POINTS</span></div><div className="chart-canvas"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><CartesianGrid strokeDasharray="2 4" vertical={false} /><XAxis dataKey="label" minTickGap={50} /><YAxis width={56} domain={['auto', 'auto']} /><Tooltip /><Area type="monotone" dataKey="equity" fill="currentColor" fillOpacity={0.12} stroke="currentColor" /></AreaChart></ResponsiveContainer></div></div><details className="json-details"><summary>Portfolio and execution intents</summary><pre>{JSON.stringify({ portfolio: result.portfolio, intents: result.intents }, null, 2)}</pre></details></>
+}
+
+type ArbitrageMode = 'build' | 'guided' | 'watch'
+type ArbitrageOpportunity = ReplayResponse['opportunities'][number]
+
+function ArbitrageWorkspace({ datasets, remember }: { datasets: DatasetManifest[]; remember: (entry: Omit<HistoryEntry, 'id' | 'createdAt'>) => void }) {
+  const [datasetId, setDatasetId] = useState(datasets[0]?.dataset_id ?? '')
+  const [symbol, setSymbol] = useState(datasets[0]?.symbols[0] ?? '')
+  const [minEdgeBps, setMinEdgeBps] = useState(5)
+  const [feeBps, setFeeBps] = useState(2)
+  const [maxQuantity, setMaxQuantity] = useState(1)
+  const [startingCash, setStartingCash] = useState(100000)
+  const [mode, setMode] = useState<ArbitrageMode>('build')
+  const [step, setStep] = useState(0)
+  const [result, setResult] = useState<ReplayResponse | null>(null)
+  const [opportunities, setOpportunities] = useState<ArbitrageOpportunity[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const dataset = datasets.find((item) => item.dataset_id === datasetId)
+  const symbols = dataset?.symbols ?? []
+  const multiVenue = (dataset?.exchanges.length ?? 0) >= 2
+  useEffect(() => {
+    if (!datasetId && datasets[0]) setDatasetId(datasets[0].dataset_id)
+    if (dataset && !symbols.includes(symbol)) setSymbol(symbols[0] ?? '')
+  }, [dataset, datasetId, datasets, symbol, symbols])
+
+  async function run() {
+    setLoading(true)
+    setError('')
+    try {
+      const config: ReplayRequest = {
+        dataset_id: datasetId,
+        strategy: 'cross_exchange_arbitrage',
+        parameters: { min_edge_bps: minEdgeBps, fee_bps: feeBps, max_quantity: maxQuantity },
+        starting_cash: startingCash,
+        timer_interval_ms: 1000,
+      }
+      const output = await replayDataset(config)
+      const rows = output.opportunities.filter((item) => !symbol || item.symbol === symbol)
+      setResult(output)
+      setOpportunities(rows)
+      setStep(0)
+      remember({
+        kind: 'replay',
+        title: `Arbitrage · ${datasetId}`,
+        summary: `${rows.length} qualified opportunities · ${output.return_pct.toFixed(2)}% return`,
+        payload: { config, output, opportunities: rows },
+      })
+    } catch (err) {
+      setError(messageOf(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fees = result && typeof result.portfolio.fees_paid === 'number' ? result.portfolio.fees_paid : 0
+  const current = opportunities[step]
+  return <div className="page-workspace arbitrage-workspace">
+    <section className="surface-card arbitrage-controls">
+      <div className="section-heading">
+        <div><span>ARBITRAGE LAB · REPLAY</span><h2>Cross-venue scanner</h2></div>
+        <div className="mode-toggle" aria-label="Arbitrage presentation mode">
+          <button className={mode === 'build' ? 'active' : ''} onClick={() => setMode('build')}>Build</button>
+          <button className={mode === 'guided' ? 'active' : ''} onClick={() => setMode('guided')}>Guided</button>
+          <button className={mode === 'watch' ? 'active' : ''} onClick={() => setMode('watch')}>Watch &amp; Learn</button>
+        </div>
+      </div>
+      <DatasetSelect datasets={datasets} value={datasetId} onChange={(value) => { setDatasetId(value); setResult(null) }} />
+      <Field label="Symbol"><select value={symbol} onChange={(event) => setSymbol(event.target.value)} disabled={!symbols.length}><option value="">All symbols</option>{symbols.map((item) => <option key={item}>{item}</option>)}</select></Field>
+      <div className="field-row"><NumberField label="Minimum edge (bps)" value={minEdgeBps} step="0.1" onChange={setMinEdgeBps} /><NumberField label="Fee per leg (bps)" value={feeBps} step="0.1" onChange={setFeeBps} /></div>
+      <div className="field-row"><NumberField label="Maximum quantity" value={maxQuantity} step="0.01" onChange={setMaxQuantity} /><NumberField label="Starting cash" value={startingCash} onChange={setStartingCash} /></div>
+      <button className="run" disabled={loading || !datasetId || !multiVenue} onClick={() => void run()}>{loading ? 'REPLAYING…' : 'RUN ARBITRAGE REPLAY'}</button>
+      <p className="safety">Simulation/replay only. The scanner does not submit orders or claim that a spread is production-executable.</p>
+      {error && <div className="error">{error}</div>}
+    </section>
+    <section className="surface-card arbitrage-results">
+      {!dataset ? <Empty title="MULTI-VENUE DATASET REQUIRED">Select a recorded dataset containing the same symbol on at least two venues.</Empty>
+        : !multiVenue ? <Empty title="MULTI-VENUE DATASET REQUIRED">This dataset contains {dataset.exchanges.length || 'one'} venue. Record a dataset with the same symbol across multiple venues before scanning.</Empty>
+          : !result ? <Empty title="NO ARBITRAGE RUN YET">Configure the edge, fee, and quantity assumptions, then run the replay.</Empty>
+            : <ArbitrageResults result={result} opportunities={opportunities} fees={fees} mode={mode} current={current} step={step} onStep={setStep} minEdgeBps={minEdgeBps} />}
+    </section>
+  </div>
+}
+
+function ArbitrageResults({ result, opportunities, fees, mode, current, step, onStep, minEdgeBps }: {
+  result: ReplayResponse
+  opportunities: ArbitrageOpportunity[]
+  fees: number
+  mode: ArbitrageMode
+  current?: ArbitrageOpportunity
+  step: number
+  onStep: (value: number) => void
+  minEdgeBps: number
+}) {
+  const qualified = opportunities.filter((item) => item.expected_edge_bps >= minEdgeBps)
+  return <div>
+    <div className="section-heading"><div><span>SIMULATION / REPLAY RESULT</span><h2>Detected opportunities</h2></div><strong className={result.return_pct >= 0 ? 'positive' : 'negative'}>{result.return_pct.toFixed(2)}% RETURN</strong></div>
+    <div className="research-metric-grid arbitrage-metrics">
+      <Metric label="Candidates" value={String(opportunities.length)} />
+      <Metric label="Qualified opportunities" value={String(qualified.length)} />
+      <Metric label="Simulated fills" value={String(result.fill_count)} />
+      <Metric label="Return" value={`${result.return_pct.toFixed(2)}%`} />
+      <Metric label="Fees" value={money(fees)} />
+      <Metric label="Drawdown" value={`${result.max_drawdown_pct.toFixed(2)}%`} />
+    </div>
+    {mode === 'guided' && <div className="guided-callout"><strong>How to read the scanner</strong><p>Buy on the venue with the lower ask and sell on the venue with the higher bid. Gross edge is the price spread in basis points; expected edge subtracts both fee assumptions. Estimated profit is buy notional × expected edge.</p></div>}
+    {mode === 'watch' ? <ArbitrageStep opportunity={current} step={step} total={opportunities.length} onStep={onStep} /> : <ArbitrageTable opportunities={opportunities} />}
+    {mode === 'build' && <details className="json-details"><summary>Replay output and portfolio</summary><pre>{JSON.stringify({ portfolio: result.portfolio, intents: result.intents }, null, 2)}</pre></details>}
+  </div>
+}
+
+function ArbitrageTable({ opportunities }: { opportunities: ArbitrageOpportunity[] }) {
+  return opportunities.length === 0 ? <Empty title="NO QUALIFIED OPPORTUNITIES">No paired buy/sell intents met the configured minimum edge.</Empty> : <div className="table-panel arbitrage-table"><div className="table-scroll"><table><thead><tr><th>Time</th><th>Buy venue</th><th>Sell venue</th><th>Buy price</th><th>Sell price</th><th>Quantity</th><th>Gross edge</th><th>Expected edge</th><th>Estimated profit</th></tr></thead><tbody>{opportunities.map((item) => <tr key={`${item.timestamp_ns}-${item.buy_venue}-${item.sell_venue}`}><td>{new Date(item.timestamp_ns / 1_000_000).toLocaleTimeString()}</td><td>{item.buy_venue}</td><td>{item.sell_venue}</td><td>{item.buy_price.toLocaleString()}</td><td>{item.sell_price.toLocaleString()}</td><td>{item.quantity}</td><td>{item.gross_edge_bps.toFixed(2)} bps</td><td className={item.expected_edge_bps >= 0 ? 'positive' : 'negative'}>{item.expected_edge_bps.toFixed(2)} bps</td><td className={item.estimated_profit >= 0 ? 'positive' : 'negative'}>{money(item.estimated_profit)}</td></tr>)}</tbody></table></div></div>
+}
+
+function ArbitrageStep({ opportunity, step, total, onStep }: { opportunity?: ArbitrageOpportunity; step: number; total: number; onStep: (value: number) => void }) {
+  if (!opportunity) return <Empty title="NO OPPORTUNITIES TO WATCH">Run a replay with a lower edge threshold or a richer dataset.</Empty>
+  return <div className="watch-card"><div className="detail-toolbar"><strong>OPPORTUNITY {step + 1} / {total}</strong><div><button className="ghost-button" disabled={step === 0} onClick={() => onStep(step - 1)}>PREVIOUS</button>{' '}<button className="ghost-button" disabled={step >= total - 1} onClick={() => onStep(step + 1)}>NEXT</button></div></div><h3>{opportunity.buy_venue} → {opportunity.sell_venue}</h3><p>At {new Date(opportunity.timestamp_ns / 1_000_000).toLocaleTimeString()}, buy {opportunity.quantity} {opportunity.symbol} at {opportunity.buy_price.toLocaleString()} and sell at {opportunity.sell_price.toLocaleString()}.</p><div className="research-metric-grid"><Metric label="Gross edge" value={`${opportunity.gross_edge_bps.toFixed(2)} bps`} /><Metric label="Expected edge" value={`${opportunity.expected_edge_bps.toFixed(2)} bps`} /><Metric label="Estimated profit" value={money(opportunity.estimated_profit)} /></div><p className="safety">This is a chronological replay observation, not a live signal.</p></div>
 }
 
 function ExperimentWorkspace({ datasets, experiments, onChanged, remember }: { datasets: DatasetManifest[]; experiments: ExperimentView[]; onChanged: () => Promise<void>; remember: (entry: Omit<HistoryEntry, 'id' | 'createdAt'>) => void }) {

@@ -231,6 +231,51 @@ class OrderIntent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+def pair_arbitrage_intents(intents: list[dict[str, Any]], fee_bps: float = 2.0) -> list[dict[str, Any]]:
+    groups: dict[tuple[int, str, str], dict[str, list[dict[str, Any]]]] = {}
+    for intent in intents:
+        if intent.get("side") not in {"buy", "sell"}:
+            continue
+        metadata = intent.get("metadata") if isinstance(intent.get("metadata"), dict) else {}
+        key = (
+            int(intent.get("timestamp_ns", 0)),
+            str(intent.get("symbol", "")),
+            str(metadata.get("edge_bps", "")),
+        )
+        groups.setdefault(key, {"buy": [], "sell": []})[intent["side"]].append(intent)
+
+    opportunities: list[dict[str, Any]] = []
+    for (timestamp_ns, symbol, _), group in groups.items():
+        buys = sorted(group["buy"], key=lambda item: str(item.get("exchange", "")))
+        sells = sorted(group["sell"], key=lambda item: str(item.get("exchange", "")))
+        for buy, sell in zip(buys, sells):
+            buy_price = float(buy.get("limit_price") or 0)
+            sell_price = float(sell.get("limit_price") or 0)
+            quantity = min(float(buy.get("quantity") or 0), float(sell.get("quantity") or 0))
+            if buy_price <= 0 or sell_price <= 0 or quantity <= 0:
+                continue
+            gross_edge_bps = (sell_price - buy_price) / buy_price * 10_000
+            metadata = buy.get("metadata") if isinstance(buy.get("metadata"), dict) else {}
+            expected_edge_bps = float(metadata.get("edge_bps", gross_edge_bps - 2 * fee_bps))
+            opportunities.append(
+                {
+                    "timestamp_ns": timestamp_ns,
+                    "symbol": symbol,
+                    "buy_venue": str(buy.get("exchange", "")),
+                    "sell_venue": str(sell.get("exchange", "")),
+                    "buy_price": buy_price,
+                    "sell_price": sell_price,
+                    "quantity": quantity,
+                    "gross_edge_bps": gross_edge_bps,
+                    "expected_edge_bps": expected_edge_bps,
+                    "estimated_profit": buy_price * quantity * expected_edge_bps / 10_000,
+                    "buy_filled": bool(buy.get("filled")),
+                    "sell_filled": bool(sell.get("filled")),
+                }
+            )
+    return sorted(opportunities, key=lambda item: (item["timestamp_ns"], item["buy_venue"], item["sell_venue"]))
+
+
 @dataclass
 class StrategyContext:
     portfolio: Portfolio
@@ -351,6 +396,7 @@ class ReplayResult(BaseModel):
     max_drawdown_pct: float
     portfolio: dict[str, Any]
     intents: list[dict[str, Any]]
+    opportunities: list[dict[str, Any]]
     equity_curve: list[dict[str, Any]]
 
 
@@ -428,6 +474,7 @@ class DeterministicReplayEngine:
             max_drawdown_pct=max_drawdown,
             portfolio=portfolio.snapshot(),
             intents=all_intents[-500:],
+            opportunities=pair_arbitrage_intents(all_intents[-500:], self.fee_bps),
             equity_curve=curve,
         )
 

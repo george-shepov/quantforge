@@ -146,6 +146,7 @@ class DatasetManifest(BaseModel):
     max_event_time_ns: int | None = None
     parts: list[str] = Field(default_factory=list)
     symbols: list[str] = Field(default_factory=list)
+    exchanges: list[str] = Field(default_factory=list)
     kinds: list[str] = Field(default_factory=list)
     chain_hash: str = "0" * 64
 
@@ -230,6 +231,7 @@ class EventDatasetCatalog:
             + ([manifest.max_event_time_ns] if manifest.max_event_time_ns is not None else [])
         )
         manifest.symbols = sorted(set(manifest.symbols) | {event.symbol for event in batch})
+        manifest.exchanges = sorted(set(manifest.exchanges) | {event.exchange for event in batch})
         manifest.kinds = sorted(set(manifest.kinds) | {event.kind.value for event in batch})
         manifest.updated_at = datetime.now(timezone.utc)
         digest = hashlib.sha256()
