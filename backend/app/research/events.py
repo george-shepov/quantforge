@@ -246,16 +246,28 @@ class EventDatasetCatalog:
         path = self._manifest_path(dataset_id)
         if not path.exists():
             raise FileNotFoundError(dataset_id)
-        return DatasetManifest.model_validate_json(path.read_text())
+        return self._derive_manifest_fields(DatasetManifest.model_validate_json(path.read_text()))
 
     def list(self) -> list[DatasetManifest]:
         manifests: list[DatasetManifest] = []
         for path in self.root.glob("*/manifest.json"):
             try:
-                manifests.append(DatasetManifest.model_validate_json(path.read_text()))
+                manifests.append(self._derive_manifest_fields(DatasetManifest.model_validate_json(path.read_text())))
             except Exception:
                 continue
         return sorted(manifests, key=lambda item: item.created_at, reverse=True)
+
+    @staticmethod
+    def _derive_manifest_fields(manifest: DatasetManifest) -> DatasetManifest:
+        if not manifest.exchanges:
+            manifest.exchanges = sorted(
+                {
+                    part.split("/", 1)[0].removeprefix("exchange=")
+                    for part in manifest.parts
+                    if part.startswith("exchange=")
+                }
+            )
+        return manifest
 
     def read(self, dataset_id: str) -> list[MarketEvent]:
         try:

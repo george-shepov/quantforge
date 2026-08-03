@@ -46,8 +46,8 @@ def test_cross_exchange_arbitrage_detects_net_edge() -> None:
 
 def test_arbitrage_intents_pair_deterministically_and_present_expected_profit() -> None:
     intents = [
-        {"exchange": "sell-venue", "symbol": "BTC", "side": "sell", "quantity": 2, "limit_price": 101, "filled": True, "timestamp_ns": 10, "metadata": {"edge_bps": 80}},
-        {"exchange": "buy-venue", "symbol": "BTC", "side": "buy", "quantity": 1.5, "limit_price": 100, "filled": True, "timestamp_ns": 10, "metadata": {"edge_bps": 80}},
+        {"exchange": "sell-venue", "symbol": "BTC", "side": "sell", "quantity": 2, "limit_price": 101, "filled": True, "timestamp_ns": 10, "metadata": {"arb_leg": "sell", "edge_bps": 80}},
+        {"exchange": "buy-venue", "symbol": "BTC", "side": "buy", "quantity": 1.5, "limit_price": 100, "filled": True, "timestamp_ns": 10, "metadata": {"arb_leg": "buy", "edge_bps": 80}},
     ]
 
     rows = pair_arbitrage_intents(intents, fee_bps=2)

@@ -237,6 +237,8 @@ def pair_arbitrage_intents(intents: list[dict[str, Any]], fee_bps: float = 2.0) 
         if intent.get("side") not in {"buy", "sell"}:
             continue
         metadata = intent.get("metadata") if isinstance(intent.get("metadata"), dict) else {}
+        if metadata.get("arb_leg") not in {"buy", "sell"}:
+            continue
         key = (
             int(intent.get("timestamp_ns", 0)),
             str(intent.get("symbol", "")),
