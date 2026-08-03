@@ -25,7 +25,9 @@ services:
       retries: 10
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       QUANTFORGE_ALLOW_NETWORK: "true"
       QUANTFORGE_DATA_ROOT: /data/quantforge
@@ -51,7 +53,9 @@ services:
       retries: 5
 
   worker:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     command: ["python", "-m", "app.research.worker"]
     environment:
       QUANTFORGE_DATA_ROOT: /data/quantforge

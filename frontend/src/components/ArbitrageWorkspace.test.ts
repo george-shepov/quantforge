@@ -18,6 +18,7 @@ const accepted: ArbitrageOpportunity = {
   quantity: 0.4,
   gross_edge_bps: 20,
   fee_cost_bps: 4,
+  slippage_cost_bps: 0,
   expected_edge_bps: 16,
   estimated_profit: 0.064,
   decision: 'accepted',

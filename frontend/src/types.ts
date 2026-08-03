@@ -148,6 +148,7 @@ export interface DatasetManifest {
   max_event_time_ns: number | null
   parts: string[]
   symbols: string[]
+  exchanges: string[]
   kinds: string[]
   chain_hash: string
 }
@@ -180,6 +181,7 @@ export interface ArbitrageScanRequest {
   min_edge_bps: number
   fee_bps: number
   max_quantity: number
+  slippage_bps: number
   limit: number
 }
 
@@ -198,6 +200,7 @@ export interface ArbitrageOpportunity {
   quantity: number
   gross_edge_bps: number
   fee_cost_bps: number
+  slippage_cost_bps: number
   expected_edge_bps: number
   estimated_profit: number
   decision: ArbitrageDecision
@@ -280,6 +283,9 @@ export interface ExecutionStoryRequest {
   side: 'buy' | 'sell'
   quantity: number
   limit_price: number | null
+  fee_bps: number
+  as_of_timestamp_ms?: number | null
+  max_age_ms?: number | null
   mode: StoryMode
   intent: string
   hypothesis: string
@@ -290,13 +296,21 @@ export interface ExecutionStoryRequest {
 }
 
 export interface ExecutionStoryResponse {
+  id: string
+  story_id: string
+  run_id: string
+  created_at: string
   execution: {
     requested_quantity: number
     filled_quantity: number
     remaining_quantity: number
     average_price: number | null
+    notional: number
+    fees: number
     status: string
-    fills: Array<{ price: number; quantity: number; notional: number }>
+    reason: string | null
+    snapshot_checksum: string
+    fills: Array<{ price: number; quantity: number; notional: number; fee: number }>
   }
   story: {
     title: string
@@ -306,13 +320,52 @@ export interface ExecutionStoryResponse {
     summary: string
     evidence: Array<{ kind: string; label: string; value: string; explanation?: string | null }>
     detailsCollapsed: boolean
+    export: {
+      title: string
+      intent: string
+      hypothesis: string
+      assumptions: string[]
+      invalidationConditions: string[]
+      hopes: string[]
+      risks: string[]
+      evidence: Array<{ kind: string; label: string; value: string; explanation?: string | null }>
+      validationSteps: Array<{ label: string; instruction: string; expected: string }>
+      reflectionPrompt: string
+      postRunReflection: string
+    }
     assumptions?: string[]
     invalidationConditions?: string[]
     hopes?: string[]
     risks?: string[]
     validationSteps?: Array<{ label: string; instruction: string; expected: string }>
     reflectionPrompt?: string
+    postRunReflection?: string
   }
+  reflections?: Array<{
+    reflection_id: string
+    story_id: string
+    created_at: string
+    text: string
+  }>
+}
+
+export interface CourseRunResponse {
+  scenario_id: string
+  schema_version: string
+  title: string
+  question: string
+  hypothesis: string
+  verdict: string
+  export_status: 'source_draft' | string
+  labs: Array<{
+    scenario_id: string
+    delta_classification: string
+    actual_outcome: Record<string, unknown>
+    delta: Array<Record<string, unknown>>
+  }>
+  provenance: Record<string, unknown>
+  exports: Record<string, string>
+  research_report: string
 }
 
 export interface HistoryEntry {

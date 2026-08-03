@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { queueExperiment, replayDataset, scanArbitrage } from './api'
+import { addExecutionReflection, queueExperiment, replayDataset, runCourse, scanArbitrage } from './api'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -10,7 +10,7 @@ describe('Arbitrage Lab API handoffs', () => {
   it('posts scanner parameters to the Phase 1 decision endpoint', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ opportunities: [] }), { status: 200 }))
     vi.stubGlobal('fetch', fetch)
-    const config = { dataset_id: 'lesson-31', min_edge_bps: 5, fee_bps: 2, max_quantity: 0.4, limit: 500 }
+    const config = { dataset_id: 'lesson-31', min_edge_bps: 5, fee_bps: 2, max_quantity: 0.4, slippage_bps: 1, limit: 500 }
 
     await scanArbitrage(config)
 
@@ -40,5 +40,29 @@ describe('Arbitrage Lab API handoffs', () => {
     await queueExperiment(config)
 
     expect(fetch).toHaveBeenCalledWith('/api/research/experiments', expect.objectContaining({ method: 'POST', body: JSON.stringify(config) }))
+  })
+
+  it('appends reflections only after a story exists', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ reflection_id: 'r-1' }), { status: 201 }))
+    vi.stubGlobal('fetch', fetch)
+
+    await addExecutionReflection('story/with spaces', 'Depth invalidated the assumption.')
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/research/execution-stories/story%2Fwith%20spaces/reflections',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ text: 'Depth invalidated the assumption.' }) }),
+    )
+  })
+
+  it('runs the server-owned executable course provenance', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ scenario_id: 'course-1' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+
+    await runCourse(11)
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/course/run',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ seed: 11 }) }),
+    )
   })
 })

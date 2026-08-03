@@ -1,0 +1,822 @@
+{
+  "events": [
+    {
+      "checksum": "2c7acf7822c98be7b0535d60781529d78e03f7fcfce3df97f4e0843257b95a13",
+      "event_time_ns": 1770000000000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "99.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "99.00",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "100.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.00",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000000000000000,
+      "schema_version": 1,
+      "sequence": 1,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "1907d43fef0856ce333bc8d5507a7036ec84446c2eaf9d89b4a6cf941c7140d4",
+      "event_time_ns": 1770000000500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "100.00",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000000500000000,
+      "schema_version": 1,
+      "sequence": 17,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "deaed05c6d4d5b7312b8a2f37bdd471c4fc89f70b23e9f19944218d45b333ed7",
+      "event_time_ns": 1770000001000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "99.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "99.25",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "100.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.25",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000001000000000,
+      "schema_version": 1,
+      "sequence": 2,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "2c218f79a620e1223a5cffc8d2fb0fd0448caca468efbcf3b3d27aa2454abaf2",
+      "event_time_ns": 1770000001500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "100.25",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000001500000000,
+      "schema_version": 1,
+      "sequence": 18,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "618edc5df0c3442f7eb9ce7929124f09efb34b5df5fa2beadb76ff67ac2eeb1c",
+      "event_time_ns": 1770000002000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "100.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "99.50",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "101.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.50",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000002000000000,
+      "schema_version": 1,
+      "sequence": 3,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "a6c3c4910979f8379075d7799491eaf298ba1d0a507492d29b1a7e776d124460",
+      "event_time_ns": 1770000002500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "100.50",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000002500000000,
+      "schema_version": 1,
+      "sequence": 19,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "5e6dbf86a6759b8488cf38e836b0efeaa3288bc07bd49256a4b93a96e9183def",
+      "event_time_ns": 1770000003000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "100.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "99.75",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "101.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.75",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000003000000000,
+      "schema_version": 1,
+      "sequence": 4,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "a38540f1b67ea05f9c90e6eeb0fcfcfd43cbcb5b1a06ba8b43842746ac8dc591",
+      "event_time_ns": 1770000003500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "100.75",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000003500000000,
+      "schema_version": 1,
+      "sequence": 20,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "3adcb1f0d568ffc578a184224d804fd1a603dac472536061f7d89895ab0444bc",
+      "event_time_ns": 1770000004000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "100.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "100.00",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "101.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.00",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000004000000000,
+      "schema_version": 1,
+      "sequence": 5,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "8f6cb1929e3d4a2ee991f5decec54bbda14f3b0342e01e6deb7154c0353858b6",
+      "event_time_ns": 1770000004500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "101.00",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000004500000000,
+      "schema_version": 1,
+      "sequence": 21,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "7330487e7616c6b9959ff03a99b66ab02f13a5a1dcf1d62ace729e79564d6fb9",
+      "event_time_ns": 1770000005000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "100.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "100.25",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "101.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.25",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000005000000000,
+      "schema_version": 1,
+      "sequence": 6,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "0cc1d595a6c4f110c86d110bafe57fd5ba0973d8afd892a3557346d6b9407102",
+      "event_time_ns": 1770000005500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "101.25",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000005500000000,
+      "schema_version": 1,
+      "sequence": 22,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "2ef5ae99cedd5728d40cea5e2a886d5cbdf8e6195d871dd9b13d0222969e2394",
+      "event_time_ns": 1770000006000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "101.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "100.50",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "102.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.50",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000006000000000,
+      "schema_version": 1,
+      "sequence": 7,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "7c51dbeea4476d73fee1551a64f5c4949ba738b729773824a317218b27a39ec5",
+      "event_time_ns": 1770000006500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "101.50",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000006500000000,
+      "schema_version": 1,
+      "sequence": 23,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "1078977f3bfab10006d0f9b9faa0829ad2100ee514b7f4defe52216a2ed71f0e",
+      "event_time_ns": 1770000007000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "101.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "100.75",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "102.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.75",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000007000000000,
+      "schema_version": 1,
+      "sequence": 8,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "707144f5053674b6fa5e173d69e3b0c1db0a6bcd3cb7e2827013b97457e66c26",
+      "event_time_ns": 1770000007500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "101.75",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000007500000000,
+      "schema_version": 1,
+      "sequence": 24,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "08e1f6385cf153c04da161140528cd96239b3f76928aa4df36e5d07bfcb17dfb",
+      "event_time_ns": 1770000008000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "101.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.00",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "102.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "103.00",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000008000000000,
+      "schema_version": 1,
+      "sequence": 9,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "6508d09b97b7a6102956353fa4856a92091c1f2fe1e9a8f9f4384c82915eecb5",
+      "event_time_ns": 1770000008500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "102.00",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000008500000000,
+      "schema_version": 1,
+      "sequence": 25,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "3426e0b6e336f2d33a357166887116cf971a53af2cc8a9433d7b5db1766878a9",
+      "event_time_ns": 1770000009000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "101.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.25",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "102.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "103.25",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000009000000000,
+      "schema_version": 1,
+      "sequence": 10,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "7c10bc543f7d9185275544782284db54914fa645a110671b26556b4a454258f1",
+      "event_time_ns": 1770000009500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "102.25",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000009500000000,
+      "schema_version": 1,
+      "sequence": 26,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "3c52332882b2c5c2fdad8c1dab411324376e421c270b5bb116e84fcd2ccc3c51",
+      "event_time_ns": 1770000010000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "102.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.50",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "103.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "103.50",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000010000000000,
+      "schema_version": 1,
+      "sequence": 11,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "d77abe91070e13ecdf767807330d557fb53e490f778a086510c00efdfca7aef4",
+      "event_time_ns": 1770000010500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "102.50",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000010500000000,
+      "schema_version": 1,
+      "sequence": 27,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "010edc4aee5c8623b6004bcabed0895fc85608b9f19546222e1022d7642d2af5",
+      "event_time_ns": 1770000011000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "102.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "101.75",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "103.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "103.75",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000011000000000,
+      "schema_version": 1,
+      "sequence": 12,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "98a34b7192563472022b32dbaf689c76873bd1180ad060c7612814848bc52c88",
+      "event_time_ns": 1770000011500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "102.75",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000011500000000,
+      "schema_version": 1,
+      "sequence": 28,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "74dd26d94cc12c14f439acabce62073e9cb7f31af8d9812fdf0b75fdf0b218e9",
+      "event_time_ns": 1770000012000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "102.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.00",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "103.50",
+              "sz": "1.00"
+            },
+            {
+              "px": "104.00",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000012000000000,
+      "schema_version": 1,
+      "sequence": 13,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "46310def8aa290e4f9ddb88a358bfea07d8b5e4f06d0e642a47f0481551719ce",
+      "event_time_ns": 1770000012500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "103.00",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000012500000000,
+      "schema_version": 1,
+      "sequence": 29,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "338501aa1f58e7359d5d803946fd2240de78f9f24013651cf2a4bc542d0e39e2",
+      "event_time_ns": 1770000013000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "102.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.25",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "103.75",
+              "sz": "1.00"
+            },
+            {
+              "px": "104.25",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000013000000000,
+      "schema_version": 1,
+      "sequence": 14,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "0b6844e8df7e5d04f1254da170539d789e8001711bfbb86cfd380a0caf4e8aac",
+      "event_time_ns": 1770000013500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "103.25",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000013500000000,
+      "schema_version": 1,
+      "sequence": 30,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "ca1f18174ae54a37e4a2538394c7a066d2aa1c6959f1e4dbc487d8fa618dd665",
+      "event_time_ns": 1770000014000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "103.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.50",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "104.00",
+              "sz": "1.00"
+            },
+            {
+              "px": "104.50",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000014000000000,
+      "schema_version": 1,
+      "sequence": 15,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "3e0c6816c90223efdfc4d8466639299238f6caed7e9a4e9f3eef593aec1f9e1e",
+      "event_time_ns": 1770000014500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "103.50",
+        "side": "A",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000014500000000,
+      "schema_version": 1,
+      "sequence": 31,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "19f7839b344a8885d492509a0768ab23cc705c71aa8397de7b6b9a8960b1d09b",
+      "event_time_ns": 1770000015000000000,
+      "exchange": "course_fixture",
+      "kind": "book",
+      "payload": {
+        "levels": [
+          [
+            {
+              "px": "103.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "102.75",
+              "sz": "2.00"
+            }
+          ],
+          [
+            {
+              "px": "104.25",
+              "sz": "1.00"
+            },
+            {
+              "px": "104.75",
+              "sz": "2.00"
+            }
+          ]
+        ]
+      },
+      "receive_time_ns": 1770000015000000000,
+      "schema_version": 1,
+      "sequence": 16,
+      "symbol": "BTC"
+    },
+    {
+      "checksum": "5d26f733304adb319d4217e439049ba5f327d5106f0340fb0d726f87c49a6c10",
+      "event_time_ns": 1770000015500000000,
+      "exchange": "course_fixture",
+      "kind": "trade",
+      "payload": {
+        "coin": "BTC",
+        "px": "103.75",
+        "side": "B",
+        "sz": "0.10"
+      },
+      "receive_time_ns": 1770000015500000000,
+      "schema_version": 1,
+      "sequence": 32,
+      "symbol": "BTC"
+    }
+  ],
+  "manifest": {
+    "chain_hash": "b0a4c4eb724d00088d081cbb6c90525633cf1f17a8c7faab3372e68badeb3f6e",
+    "dataset_id": "course-btc-l2-v1",
+    "event_count": 32,
+    "kinds": [
+      "book",
+      "trade"
+    ],
+    "label": "synthetic course fixture; not current market liquidity",
+    "max_event_time_ns": 1770000015500000000,
+    "min_event_time_ns": 1770000000000000000,
+    "schema_version": 1,
+    "seed": 7,
+    "source": "synthetic",
+    "symbols": [
+      "BTC"
+    ]
+  }
+}

@@ -3,6 +3,7 @@ import type {
   ArbitrageScanRequest,
   ArbitrageScanResponse,
   CatalogResponse,
+  CourseRunResponse,
   DatasetManifest,
   ExecutionStoryRequest,
   ExecutionStoryResponse,
@@ -15,77 +16,137 @@ import type {
   ResearchCapabilities,
   RunConfig,
   SafetyStatus,
-} from './types'
+} from "./types";
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
-  })
+  });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ detail: response.statusText }))
-    throw new Error(typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail ?? payload))
+    const payload = await response
+      .json()
+      .catch(() => ({ detail: response.statusText }));
+    throw new Error(
+      typeof payload.detail === "string"
+        ? payload.detail
+        : JSON.stringify(payload.detail ?? payload),
+    );
   }
-  return response.status === 204 ? (undefined as T) : response.json()
+  return response.status === 204 ? (undefined as T) : response.json();
 }
 
 export function runBacktest(config: RunConfig) {
-  return request<BacktestResponse>('/api/backtests/run', { method: 'POST', body: JSON.stringify(config) })
+  return request<BacktestResponse>("/api/backtests/run", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
 }
 
 export function getCatalog() {
-  return request<CatalogResponse>('/api/catalog')
+  return request<CatalogResponse>("/api/catalog");
 }
 
 export function getCapabilities() {
-  return request<ResearchCapabilities>('/api/research/capabilities')
+  return request<ResearchCapabilities>("/api/research/capabilities");
 }
 
 export function getExecutionSafety() {
-  return request<SafetyStatus>('/api/research/execution/safety')
+  return request<SafetyStatus>("/api/research/execution/safety");
 }
 
 export function listRecordings() {
-  return request<RecordingStatus[]>('/api/research/recordings')
+  return request<RecordingStatus[]>("/api/research/recordings");
 }
 
 export function startRecording(config: RecordingConfig) {
-  return request<RecordingStatus>('/api/research/recordings', { method: 'POST', body: JSON.stringify(config) })
+  return request<RecordingStatus>("/api/research/recordings", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
 }
 
 export function stopRecording(datasetId: string) {
-  return request<RecordingStatus>(`/api/research/recordings/${encodeURIComponent(datasetId)}`, { method: 'DELETE' })
+  return request<RecordingStatus>(
+    `/api/research/recordings/${encodeURIComponent(datasetId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function listDatasets() {
-  return request<DatasetManifest[]>('/api/research/datasets')
+  return request<DatasetManifest[]>("/api/research/datasets");
 }
 
 export function replayDataset(config: ReplayRequest) {
-  return request<ReplayResponse>('/api/research/replay', { method: 'POST', body: JSON.stringify(config) })
+  return request<ReplayResponse>("/api/research/replay", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
 }
 
 export function scanArbitrage(config: ArbitrageScanRequest) {
-  return request<ArbitrageScanResponse>('/api/research/arbitrage/scan', { method: 'POST', body: JSON.stringify(config) })
+  return request<ArbitrageScanResponse>("/api/research/arbitrage/scan", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
 }
 
 export function queueExperiment(config: ExperimentConfig) {
-  return request<ExperimentView>('/api/research/experiments', { method: 'POST', body: JSON.stringify(config) })
+  return request<ExperimentView>("/api/research/experiments", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
 }
 
 export function listExperiments(limit = 25) {
-  return request<ExperimentView[]>(`/api/research/experiments?limit=${limit}`)
+  return request<ExperimentView[]>(`/api/research/experiments?limit=${limit}`);
 }
 
 export function getExperiment(id: string) {
-  return request<ExperimentView>(`/api/research/experiments/${encodeURIComponent(id)}`)
+  return request<ExperimentView>(
+    `/api/research/experiments/${encodeURIComponent(id)}`,
+  );
 }
 
 export function buildExecutionStory(config: ExecutionStoryRequest) {
-  return request<ExecutionStoryResponse>('/api/research/execution/story', { method: 'POST', body: JSON.stringify(config) })
+  return request<ExecutionStoryResponse>("/api/research/execution/story", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
+}
+
+export function listExecutionStories(limit = 25) {
+  return request<ExecutionStoryResponse[]>(
+    `/api/research/execution-stories?limit=${limit}`,
+  );
+}
+
+export function getExecutionStory(id: string) {
+  return request<ExecutionStoryResponse>(
+    `/api/research/execution-stories/${encodeURIComponent(id)}`,
+  );
+}
+
+export function addExecutionReflection(id: string, text: string) {
+  return request<{
+    reflection_id: string;
+    story_id: string;
+    created_at: string;
+    text: string;
+  }>(`/api/research/execution-stories/${encodeURIComponent(id)}/reflections`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export function runCourse(seed = 7) {
+  return request<CourseRunResponse>("/api/course/run", {
+    method: "POST",
+    body: JSON.stringify({ seed }),
+  });
 }

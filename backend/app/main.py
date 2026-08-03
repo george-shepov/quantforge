@@ -18,7 +18,7 @@ from app.metering import (
     require_api_principal,
 )
 from app.models import BacktestRequest, BacktestResponse
-from app.research.api import router as research_router
+from app.research.api import course_router, router as research_router
 
 
 class ApiKeyCreateRequest(BaseModel):
@@ -39,6 +39,7 @@ app.add_middleware(
 )
 app.add_middleware(MeteredApiMiddleware, store=metering_store)
 app.include_router(research_router)
+app.include_router(course_router)
 
 
 @app.get("/api/health")

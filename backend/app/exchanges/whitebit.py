@@ -5,6 +5,8 @@ import re
 
 import httpx
 
+from app.symbols import canonical_symbol
+
 from app.exchanges.base import ExchangeAdapter, ExchangeAdapterError
 from app.exchanges.environment import configured_environment, endpoints_for
 from app.models import Candle, MarketDataRequest
@@ -80,14 +82,17 @@ class WhiteBITAdapter(ExchangeAdapter):
     async def fetch_order_book(self, symbol: str, depth: int = 50) -> dict:
         environment = configured_environment(self.name)
         endpoint = endpoints_for(self.name, environment)
-        params = {"market": _normalize_symbol(symbol, environment.value == "demo"), "limit": min(depth, 100)}
+        venue_symbol = _normalize_symbol(symbol, environment.value == "demo")
+        params = {"market": venue_symbol, "limit": min(depth, 100)}
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(f"{endpoint.rest}/public/orderbook", params=params)
             response.raise_for_status()
             payload = response.json()
         return {
             "exchange": self.name,
-            "symbol": symbol.upper(),
+            "symbol": canonical_symbol(venue_symbol),
+            "canonical_symbol": canonical_symbol(venue_symbol),
+            "venue_symbol": venue_symbol,
             "timestamp_ms": int(datetime.now(timezone.utc).timestamp() * 1000),
             "sequence": int(payload.get("timestamp", 0)) if isinstance(payload, dict) else 0,
             "bids": [[float(p), float(q)] for p, q in payload.get("bids", [])],

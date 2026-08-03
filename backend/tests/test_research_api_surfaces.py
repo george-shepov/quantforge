@@ -73,10 +73,33 @@ def test_execution_story_endpoint_supports_guided_mode():
     )
     assert response.status_code == 200
     payload = response.json()
+    assert payload["id"] == payload["story_id"] == payload["run_id"]
+    assert payload["execution"]["snapshot_checksum"]
     assert payload["execution"]["status"] == "partially_filled"
     assert payload["execution"]["filled_quantity"] == 0.7
     assert payload["story"]["mode"] == "guided"
     assert payload["story"]["validationSteps"]
+
+    story_id = payload["story_id"]
+    fetched = client.get(f"/api/research/execution-stories/{story_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["story_id"] == story_id
+
+    listed = client.get("/api/research/execution-stories?limit=100")
+    assert listed.status_code == 200
+    assert any(item["story_id"] == story_id for item in listed.json())
+
+    reflected = client.post(
+        f"/api/research/execution-stories/{story_id}/reflections",
+        json={"text": "Depth was lower than the hypothesis assumed."},
+    )
+    assert reflected.status_code == 201
+    assert reflected.json()["text"].startswith("Depth was lower")
+
+    after_reflection = client.get(f"/api/research/execution-stories/{story_id}").json()
+    assert after_reflection["execution"] == fetched.json()["execution"]
+    assert after_reflection["story"] == fetched.json()["story"]
+    assert after_reflection["reflections"][-1]["text"].startswith("Depth was lower")
 
 
 def test_experiment_store_lists_newest_first(tmp_path):

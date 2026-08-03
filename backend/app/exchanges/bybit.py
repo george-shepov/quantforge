@@ -5,6 +5,8 @@ import re
 
 import httpx
 
+from app.symbols import canonical_symbol
+
 from app.exchanges.base import ExchangeAdapter, ExchangeAdapterError
 from app.exchanges.environment import configured_environment, endpoints_for
 from app.models import Candle, MarketDataRequest
@@ -64,7 +66,8 @@ class BybitAdapter(ExchangeAdapter):
     async def fetch_order_book(self, symbol: str, depth: int = 50) -> dict:
         environment = configured_environment(self.name)
         endpoint = endpoints_for(self.name, environment)
-        params = {"category": "linear", "symbol": _normalize_symbol(symbol), "limit": min(depth, 200)}
+        venue_symbol = _normalize_symbol(symbol)
+        params = {"category": "linear", "symbol": venue_symbol, "limit": min(depth, 200)}
         payload = await _get_public_json(
             f"{endpoint.rest}/v5/market/orderbook",
             params,
@@ -75,7 +78,9 @@ class BybitAdapter(ExchangeAdapter):
         result = payload["result"]
         return {
             "exchange": self.name,
-            "symbol": symbol.upper(),
+            "symbol": canonical_symbol(venue_symbol),
+            "canonical_symbol": canonical_symbol(venue_symbol),
+            "venue_symbol": venue_symbol,
             "timestamp_ms": int(result.get("ts", payload.get("time", 0))),
             "sequence": int(result.get("u", 0)),
             "bids": [[float(p), float(q)] for p, q in result.get("b", [])],

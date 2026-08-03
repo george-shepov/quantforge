@@ -11,6 +11,10 @@ os.environ.setdefault(
     "QUANTFORGE_METERING_DB",
     str(_TEST_DATA_ROOT / "metering.sqlite3"),
 )
+os.environ.setdefault(
+    "QUANTFORGE_DATA_ROOT",
+    str(_TEST_DATA_ROOT / "quantforge"),
+)
 
 
 def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ARG001
