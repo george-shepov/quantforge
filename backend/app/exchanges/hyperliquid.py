@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 
 import httpx
 
@@ -20,8 +21,8 @@ class HyperliquidAdapter(ExchangeAdapter):
         payload = {
             "type": "candleSnapshot",
             "req": {
-                "coin": request.symbol.upper(),
-                "interval": request.interval,
+                "coin": _normalize_symbol(request.symbol),
+                "interval": _normalize_interval(request.interval),
                 "startTime": int(start.timestamp() * 1000),
                 "endTime": int(end.timestamp() * 1000),
             },
@@ -51,8 +52,32 @@ class HyperliquidAdapter(ExchangeAdapter):
         return candles
 
 
+def _normalize_symbol(symbol: str) -> str:
+    parts = [
+        part
+        for part in re.split(r"[/_:\-]", symbol.upper())
+        if part and part not in {"PERP", "PERPETUAL"}
+    ]
+    if not parts:
+        raise ExchangeAdapterError("Hyperliquid symbol is empty")
+    base = parts[0]
+    if len(parts) == 1:
+        for quote in ("USDT", "USDC"):
+            if base.endswith(quote) and len(base) > len(quote):
+                base = base[: -len(quote)]
+                break
+    return base
+
+
+def _normalize_interval(interval: str) -> str:
+    value = interval.strip().lower()
+    if value not in {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d", "3d", "1w"}:
+        raise ExchangeAdapterError(f"Hyperliquid interval is not supported: {interval}")
+    return value
+
+
 def _interval_delta(interval: str, bars: int) -> timedelta:
-    units = {"m": "minutes", "h": "hours", "d": "days"}
+    units = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
     suffix = interval[-1]
     if suffix not in units:
         return timedelta(hours=bars)

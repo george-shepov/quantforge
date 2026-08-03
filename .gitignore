@@ -8,5 +8,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 coverage/
+data/
 *.sqlite3
 .DS_Store

@@ -16,6 +16,22 @@ QuantForge remains **simulation first**. Mainnet order submission is not impleme
 
 There is no mainnet URL, mainnet switch, withdrawal function, wallet-connect flow, or generic signed-action endpoint in this adapter.
 
+### Rollback point before Codex execution
+
+Before a Codex task that can update the default branch, create a remote backup of the exact current `main` or `master` commit:
+
+```bash
+./scripts/backup-default-branch.sh
+```
+
+To make that preflight automatic with `codex exec`, use:
+
+```bash
+./scripts/codex-exec-safe.sh "<task>"
+```
+
+The script pushes `backup/<branch>-pre-codex-<UTC timestamp>-<SHA>` and stops the Codex task if the backup push fails.
+
 ## Event research milestone
 
 ### Hyperliquid WebSocket recorder
@@ -189,6 +205,16 @@ curl -X POST http://localhost:8008/api/research/execution/testnet-order \
 ```
 
 Actual testnet submission additionally requires the environment gates and safety header. Keep the gate disabled in normal research deployments.
+
+## Execution stories
+
+`POST /api/research/execution/story` records immutable execution facts together with a structured thesis and returns a referenceable `story_id`. Retrieve an export with:
+
+```bash
+curl http://localhost:8008/api/research/execution-stories/<story-id>
+```
+
+The export keeps facts, assumptions, hypotheses, risks, validation steps, and post-run reflection together. Expert and guided modes only change presentation; they never change execution calculations.
 
 ## Existing candle backtester
 

@@ -11,6 +11,8 @@ from typing import Any, Iterable
 
 from pydantic import BaseModel, Field
 
+from app.symbols import canonical_symbol
+
 from .events import EventKind, MarketEvent, event_sort_key
 
 
@@ -119,6 +121,9 @@ class BookQuote:
     ask_size: float
     timestamp_ns: int
     source_event_checksum: str = ""
+    venue_symbol: str = ""
+    bid_levels: tuple[tuple[float, float], ...] = ()
+    ask_levels: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass
@@ -131,6 +136,8 @@ class ArbitrageOpportunity:
     quantity: float
     gross_edge_bps: float
     expected_edge_bps: float
+    slippage_bps: float = 0.0
+    residual_quantity: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -143,6 +150,7 @@ class ArbitrageCandidate:
     quantity: float
     gross_edge_bps: float
     fee_cost_bps: float
+    slippage_cost_bps: float
     expected_edge_bps: float
     estimated_profit: float
     decision: str
@@ -156,6 +164,7 @@ class ArbitrageCandidate:
     def explanation(self) -> str:
         arithmetic = (
             f"Gross edge {self.gross_edge_bps:.4f} bps - fees {self.fee_cost_bps:.4f} bps "
+            f"- slippage {self.slippage_cost_bps:.4f} bps "
             f"= expected edge {self.expected_edge_bps:.4f} bps."
         )
         if self.decision == "accepted":
@@ -164,10 +173,17 @@ class ArbitrageCandidate:
 
 
 class CrossExchangeArbitrageEngine:
-    def __init__(self, min_edge_bps: float = 5.0, fee_bps: float = 2.0, max_quantity: float = 1.0) -> None:
+    def __init__(
+        self,
+        min_edge_bps: float = 5.0,
+        fee_bps: float = 2.0,
+        max_quantity: float = 1.0,
+        slippage_bps: float = 0.0,
+    ) -> None:
         self.min_edge_bps = min_edge_bps
         self.fee_bps = fee_bps
         self.max_quantity = max_quantity
+        self.slippage_bps = max(slippage_bps, 0.0)
         self.books: dict[tuple[str, str], BookQuote] = {}
 
     def update(self, quote: BookQuote) -> list[ArbitrageOpportunity]:
@@ -192,6 +208,7 @@ class CrossExchangeArbitrageEngine:
                 quantity=item.quantity,
                 gross_edge_bps=item.gross_edge_bps,
                 expected_edge_bps=item.expected_edge_bps,
+                slippage_bps=item.slippage_cost_bps / 2,
             )
             for item in candidates
             if item.decision == "accepted"
@@ -202,14 +219,25 @@ class CrossExchangeArbitrageEngine:
         books = [book for (_, candidate), book in self.books.items() if candidate == symbol]
         candidates: list[ArbitrageCandidate] = []
         for buy, sell in itertools.permutations(books, 2):
-            if buy.exchange == sell.exchange or buy.ask <= 0:
+            if buy.exchange == sell.exchange or buy.ask <= 0 or sell.bid <= 0:
                 continue
             if updated_exchange is not None and updated_exchange not in {buy.exchange, sell.exchange}:
                 continue
-            gross = (sell.bid - buy.ask) / buy.ask * 10_000
+            quantity = min(
+                _available_quantity(buy.ask_levels or ((buy.ask, buy.ask_size),)),
+                _available_quantity(sell.bid_levels or ((sell.bid, sell.bid_size),)),
+                self.max_quantity,
+            )
+            if quantity <= 0:
+                continue
+            buy_price = _volume_weighted_price(buy.ask_levels or ((buy.ask, buy.ask_size),), quantity)
+            sell_price = _volume_weighted_price(sell.bid_levels or ((sell.bid, sell.bid_size),), quantity)
+            if buy_price is None or sell_price is None or not math.isfinite(buy_price) or not math.isfinite(sell_price):
+                continue
+            gross = (sell_price - buy_price) / buy_price * 10_000
             fee_cost = 2 * self.fee_bps
-            expected = gross - fee_cost
-            quantity = min(buy.ask_size, sell.bid_size, self.max_quantity)
+            slippage_cost = 2 * self.slippage_bps
+            expected = gross - fee_cost - slippage_cost
             accepted = expected >= self.min_edge_bps
             reasons: tuple[str, ...] = () if accepted else (
                 f"Rejected because expected edge {expected:.4f} bps is below the "
@@ -220,13 +248,14 @@ class CrossExchangeArbitrageEngine:
                     symbol=symbol,
                     buy_exchange=buy.exchange,
                     sell_exchange=sell.exchange,
-                    buy_price=buy.ask,
-                    sell_price=sell.bid,
+                    buy_price=buy_price,
+                    sell_price=sell_price,
                     quantity=quantity,
                     gross_edge_bps=gross,
                     fee_cost_bps=fee_cost,
+                    slippage_cost_bps=slippage_cost,
                     expected_edge_bps=expected,
-                    estimated_profit=buy.ask * quantity * expected / 10_000,
+                    estimated_profit=buy_price * quantity * expected / 10_000,
                     decision="accepted" if accepted else "rejected",
                     rejection_reasons=reasons,
                     buy_timestamp_ns=buy.timestamp_ns,
@@ -245,16 +274,24 @@ def book_quote_from_event(event: MarketEvent) -> BookQuote | None:
     if not isinstance(levels, list) or len(levels) < 2 or not levels[0] or not levels[1]:
         return None
     try:
-        bid, ask = levels[0][0], levels[1][0]
+        bid_levels = _normalize_quote_levels(levels[0], reverse=True)
+        ask_levels = _normalize_quote_levels(levels[1], reverse=False)
+        if not bid_levels or not ask_levels:
+            return None
+        bid, ask = bid_levels[0], ask_levels[0]
+        symbol = canonical_symbol(event.symbol)
         return BookQuote(
             exchange=event.exchange,
-            symbol=event.symbol,
-            bid=float(bid["px"]),
-            ask=float(ask["px"]),
-            bid_size=float(bid["sz"]),
-            ask_size=float(ask["sz"]),
+            symbol=symbol,
+            bid=bid[0],
+            ask=ask[0],
+            bid_size=bid[1],
+            ask_size=ask[1],
             timestamp_ns=event.event_time_ns,
             source_event_checksum=event.checksum,
+            venue_symbol=event.symbol,
+            bid_levels=bid_levels,
+            ask_levels=ask_levels,
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -267,9 +304,10 @@ def scan_arbitrage_events(
     min_edge_bps: float = 5.0,
     fee_bps: float = 2.0,
     max_quantity: float = 1.0,
+    slippage_bps: float = 0.0,
     limit: int = 500,
 ) -> dict[str, Any]:
-    engine = CrossExchangeArbitrageEngine(min_edge_bps, fee_bps, max_quantity)
+    engine = CrossExchangeArbitrageEngine(min_edge_bps, fee_bps, max_quantity, slippage_bps)
     rows: deque[dict[str, Any]] = deque(maxlen=max(limit, 1))
     event_count = 0
     for event in sorted(events, key=event_sort_key):
@@ -291,6 +329,7 @@ def scan_arbitrage_events(
                     f"{min_edge_bps:.12g}",
                     f"{fee_bps:.12g}",
                     f"{max_quantity:.12g}",
+                    f"{slippage_bps:.12g}",
                 )
             )
             rows.append(
@@ -315,6 +354,7 @@ def scan_arbitrage_events(
             "min_edge_bps": min_edge_bps,
             "fee_bps": fee_bps,
             "max_quantity": max_quantity,
+            "slippage_bps": slippage_bps,
         },
         "opportunities": retained_rows,
         "safety": {
@@ -323,6 +363,55 @@ def scan_arbitrage_events(
             "message": "Replay analysis only. No orders are signed or submitted.",
         },
     }
+
+
+def _available_quantity(levels: tuple[tuple[float, float], ...]) -> float:
+    return sum(size for price, size in levels if math.isfinite(price) and math.isfinite(size) and price > 0 and size > 0)
+
+
+def _execution_limit_price(levels: tuple[tuple[float, float], ...], quantity: float) -> float | None:
+    remaining = quantity
+    for price, size in levels:
+        if price <= 0 or size <= 0:
+            continue
+        remaining -= min(remaining, size)
+        if remaining <= 1e-12:
+            return price
+    return None
+
+
+def _volume_weighted_price(levels: tuple[tuple[float, float], ...], quantity: float) -> float | None:
+    remaining = quantity
+    notional = 0.0
+    for price, size in levels:
+        if price <= 0 or size <= 0:
+            continue
+        filled = min(remaining, size)
+        notional += filled * price
+        remaining -= filled
+        if remaining <= 1e-12:
+            break
+    return notional / quantity if remaining <= 1e-12 and quantity > 0 else None
+
+
+def _normalize_quote_levels(raw_levels: object, *, reverse: bool) -> tuple[tuple[float, float], ...]:
+    if not isinstance(raw_levels, (list, tuple)):
+        return ()
+    quantities: dict[float, float] = {}
+    for raw_level in raw_levels:
+        if not isinstance(raw_level, dict):
+            return ()
+        try:
+            price = float(raw_level["px"])
+            size = float(raw_level["sz"])
+        except (KeyError, TypeError, ValueError):
+            return ()
+        if not math.isfinite(price) or not math.isfinite(size) or price <= 0 or size <= 0:
+            return ()
+        quantities[price] = quantities.get(price, 0.0) + size
+    return tuple(sorted(quantities.items(), reverse=reverse))
+
+
 
 
 @dataclass
@@ -430,23 +519,28 @@ class CrossVenueArbitrageStrategy(Strategy):
             min_edge_bps=float(parameters.get("min_edge_bps", 5.0)),
             fee_bps=float(parameters.get("fee_bps", 2.0)),
             max_quantity=float(parameters.get("max_quantity", 1.0)),
+            slippage_bps=float(parameters.get("slippage_bps", 0.0)),
         )
 
     def on_book(self, context: StrategyContext) -> None:
-        quote = context.books.get((context.event.exchange, context.event.symbol))
+        quote = context.books.get((context.event.exchange, canonical_symbol(context.event.symbol)))
         if not quote:
             return
         opportunities = self.engine.update(quote)
         if not opportunities:
             return
         best = opportunities[0]
+        buy_book = self.engine.books[(best.buy_exchange, best.symbol)]
+        sell_book = self.engine.books[(best.sell_exchange, best.symbol)]
         context.order(
             OrderIntent(
                 exchange=best.buy_exchange,
                 symbol=best.symbol,
                 side="buy",
                 quantity=best.quantity,
-                limit_price=best.buy_price,
+                limit_price=_execution_limit_price(
+                    buy_book.ask_levels or ((buy_book.ask, buy_book.ask_size),), best.quantity
+                ),
                 maker_only=False,
                 metadata={"arb_leg": "buy", "edge_bps": best.expected_edge_bps},
             )
@@ -457,7 +551,9 @@ class CrossVenueArbitrageStrategy(Strategy):
                 symbol=best.symbol,
                 side="sell",
                 quantity=best.quantity,
-                limit_price=best.sell_price,
+                limit_price=_execution_limit_price(
+                    sell_book.bid_levels or ((sell_book.bid, sell_book.bid_size),), best.quantity
+                ),
                 maker_only=False,
                 metadata={"arb_leg": "sell", "edge_bps": best.expected_edge_bps},
             )
@@ -547,7 +643,11 @@ class DeterministicReplayEngine:
                 fill = self._simulate_fill(intent, books, event.event_time_ns)
                 record = intent.model_dump()
                 record["timestamp_ns"] = event.event_time_ns
+                filled_quantity = fill.quantity if fill is not None else 0.0
                 record["filled"] = fill is not None
+                record["filled_quantity"] = filled_quantity
+                record["residual_quantity"] = max(intent.quantity - filled_quantity, 0.0)
+                record["fill_price"] = fill.price if fill is not None else None
                 all_intents.append(record)
                 if fill:
                     portfolio.apply_fill(fill)
@@ -613,8 +713,8 @@ class DeterministicReplayEngine:
             quote = book_quote_from_event(event)
             if quote is None:
                 return
-            books[(event.exchange, event.symbol)] = quote
-            portfolio.mark(event.exchange, event.symbol, (quote.bid + quote.ask) / 2)
+            books[(event.exchange, quote.symbol)] = quote
+            portfolio.mark(event.exchange, quote.symbol, (quote.bid + quote.ask) / 2)
 
     def _simulate_fill(
         self, intent: OrderIntent, books: dict[tuple[str, str], BookQuote], timestamp_ns: int
@@ -622,15 +722,28 @@ class DeterministicReplayEngine:
         quote = books.get((intent.exchange, intent.symbol))
         if not quote:
             return None
-        executable = quote.ask if intent.side == "buy" else quote.bid
-        if intent.limit_price is not None:
-            if intent.side == "buy" and intent.limit_price < executable:
-                return None
-            if intent.side == "sell" and intent.limit_price > executable:
-                return None
-        price = executable
-        fee = price * intent.quantity * self.fee_bps / 10_000
-        return Fill(intent.exchange, intent.symbol, intent.side, intent.quantity, price, fee, timestamp_ns)
+        levels = quote.ask_levels if intent.side == "buy" else quote.bid_levels
+        if not levels:
+            levels = ((quote.ask, quote.ask_size),) if intent.side == "buy" else ((quote.bid, quote.bid_size),)
+        remaining = intent.quantity
+        notional = 0.0
+        for price, size in levels:
+            if intent.limit_price is not None:
+                if intent.side == "buy" and price > intent.limit_price:
+                    break
+                if intent.side == "sell" and price < intent.limit_price:
+                    break
+            filled = min(remaining, size)
+            notional += filled * price
+            remaining -= filled
+            if remaining <= 1e-12:
+                break
+        filled_quantity = intent.quantity - remaining
+        if filled_quantity <= 1e-12 or notional <= 0:
+            return None
+        price = notional / filled_quantity
+        fee = notional * self.fee_bps / 10_000
+        return Fill(intent.exchange, intent.symbol, intent.side, filled_quantity, price, fee, timestamp_ns)
 
 
 def parameter_combinations(base: dict[str, Any], grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
@@ -664,7 +777,7 @@ def monte_carlo_resample(
     returns: list[float], runs: int = 500, block_size: int = 5, seed: int = 7
 ) -> dict[str, float]:
     if not returns or runs <= 0:
-        return {"p05": 0.0, "median": 0.0, "p95": 0.0, "loss_probability": 0.0}
+        return {"p05": 0.0, "median": 0.0, "p95": 0.0, "loss_probability": 0.0, "runs": 0.0}
     rng = random.Random(seed)
     block_size = max(1, min(block_size, len(returns)))
     totals: list[float] = []
@@ -686,4 +799,5 @@ def monte_carlo_resample(
         "median": statistics.median(totals),
         "p95": percentile(0.95),
         "loss_probability": sum(value < 0 for value in totals) / len(totals),
+        "runs": float(runs),
     }

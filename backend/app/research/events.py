@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -146,6 +147,7 @@ class DatasetManifest(BaseModel):
     max_event_time_ns: int | None = None
     parts: list[str] = Field(default_factory=list)
     symbols: list[str] = Field(default_factory=list)
+    exchanges: list[str] = Field(default_factory=list)
     kinds: list[str] = Field(default_factory=list)
     chain_hash: str = "0" * 64
 
@@ -159,8 +161,9 @@ class EventDatasetCatalog:
         return f"hl-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:10]}"
 
     def _dataset_dir(self, dataset_id: str) -> Path:
-        safe = dataset_id.replace("/", "_").replace("..", "_")
-        return self.root / safe
+        if not isinstance(dataset_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", dataset_id):
+            raise ValueError("Invalid dataset id")
+        return self.root / dataset_id
 
     def _manifest_path(self, dataset_id: str) -> Path:
         return self._dataset_dir(dataset_id) / "manifest.json"
@@ -230,6 +233,7 @@ class EventDatasetCatalog:
             + ([manifest.max_event_time_ns] if manifest.max_event_time_ns is not None else [])
         )
         manifest.symbols = sorted(set(manifest.symbols) | {event.symbol for event in batch})
+        manifest.exchanges = sorted(set(manifest.exchanges) | {event.exchange for event in batch})
         manifest.kinds = sorted(set(manifest.kinds) | {event.kind.value for event in batch})
         manifest.updated_at = datetime.now(timezone.utc)
         digest = hashlib.sha256()
@@ -244,16 +248,28 @@ class EventDatasetCatalog:
         path = self._manifest_path(dataset_id)
         if not path.exists():
             raise FileNotFoundError(dataset_id)
-        return DatasetManifest.model_validate_json(path.read_text())
+        return self._derive_manifest_fields(DatasetManifest.model_validate_json(path.read_text()))
 
     def list(self) -> list[DatasetManifest]:
         manifests: list[DatasetManifest] = []
         for path in self.root.glob("*/manifest.json"):
             try:
-                manifests.append(DatasetManifest.model_validate_json(path.read_text()))
+                manifests.append(self._derive_manifest_fields(DatasetManifest.model_validate_json(path.read_text())))
             except Exception:
                 continue
         return sorted(manifests, key=lambda item: item.created_at, reverse=True)
+
+    @staticmethod
+    def _derive_manifest_fields(manifest: DatasetManifest) -> DatasetManifest:
+        if not manifest.exchanges:
+            manifest.exchanges = sorted(
+                {
+                    part.split("/", 1)[0].removeprefix("exchange=")
+                    for part in manifest.parts
+                    if part.startswith("exchange=")
+                }
+            )
+        return manifest
 
     def read(self, dataset_id: str) -> list[MarketEvent]:
         try:
@@ -264,7 +280,10 @@ class EventDatasetCatalog:
         events: list[MarketEvent] = []
         base = self._dataset_dir(dataset_id)
         for part in manifest.parts:
-            table = pq.read_table(base / part)
+            target = (base / part).resolve()
+            if base.resolve() not in target.parents:
+                raise ValueError("Dataset manifest contains an invalid part path")
+            table = pq.read_table(target)
             for row in table.to_pylist():
                 events.append(
                     MarketEvent(

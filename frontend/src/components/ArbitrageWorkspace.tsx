@@ -41,6 +41,7 @@ export function ArbitrageWorkspace({ datasets, remember, onChanged }: Props) {
     min_edge_bps: 5,
     fee_bps: 2,
     max_quantity: 1,
+    slippage_bps: 0,
     limit: 500,
   })
   const [mode, setMode] = useState<ArbitrageMode>('guided')
@@ -182,9 +183,10 @@ export function ArbitrageWorkspace({ datasets, remember, onChanged }: Props) {
       <label><span>Replay dataset</span><select value={request.dataset_id} onChange={(event) => setRequest({ ...request, dataset_id: event.target.value })}><option value="">Select dataset</option>{datasets.map((dataset) => <option key={dataset.dataset_id} value={dataset.dataset_id}>{dataset.dataset_id} · {dataset.event_count.toLocaleString()} events</option>)}</select></label>
       <label><span>Minimum edge (bps)</span><input inputMode="decimal" type="number" step="0.1" value={request.min_edge_bps} onChange={(event) => setRequest({ ...request, min_edge_bps: Number(event.target.value) })} /></label>
       <label><span>Fee per leg (bps)</span><input inputMode="decimal" type="number" step="0.1" min="0" value={request.fee_bps} onChange={(event) => setRequest({ ...request, fee_bps: Number(event.target.value) })} /></label>
+      <label><span>Slippage per leg (bps)</span><input inputMode="decimal" type="number" step="0.1" min="0" value={request.slippage_bps} onChange={(event) => setRequest({ ...request, slippage_bps: Number(event.target.value) })} /></label>
       <label><span>Maximum quantity</span><input inputMode="decimal" type="number" step="0.01" min="0.00000001" value={request.max_quantity} onChange={(event) => setRequest({ ...request, max_quantity: Number(event.target.value) })} /></label>
       <button className="arb-scan-button" disabled={loading || !request.dataset_id} onClick={() => void scan()}>{loading ? 'SCANNING REPLAY…' : 'SCAN REPLAY'}</button>
-      {mode === 'build' && <p className="arb-build-note">Expected edge = gross spread − buy fee − sell fee. Later phases add quote age, skew, latency, slippage, funding, legging loss, and rebalancing without hiding any term.</p>}
+      {mode === 'build' && <p className="arb-build-note">Expected edge = depth-adjusted gross spread − buy fee − sell fee − modeled slippage on both legs. Later phases add quote age, skew, latency, funding, legging loss, and rebalancing without hiding any term.</p>}
       {error && <div className="error arb-error">{error}</div>}
     </section>
 
@@ -218,8 +220,8 @@ function OpportunityDetail({ item, mode, index, total, action, actionMessage, on
   return <article className={`arb-detail mode-${mode}`}>
     <header><div><span>{mode === 'watch' ? `LESSON ${index + 1} OF ${total}` : 'SELECTED DECISION'}</span><h3>{item.buy_exchange} → {item.sell_exchange}</h3></div><DecisionPill decision={item.decision} /></header>
     {mode !== 'expert' && <p className="arb-explanation">{mode === 'watch' ? opportunityLesson(item) : item.explanation}</p>}
-    <div className="arb-equation"><span><small>Gross spread</small>{item.gross_edge_bps.toFixed(4)} bps</span><i>−</i><span><small>Two-leg fees</small>{item.fee_cost_bps.toFixed(4)} bps</span><i>=</i><span className={item.expected_edge_bps >= 0 ? 'positive' : 'negative'}><small>Expected edge</small>{item.expected_edge_bps.toFixed(4)} bps</span></div>
-    {mode === 'guided' && <div className="arb-guided-grid"><section><span>WHY THIS DECISION</span><p>{item.decision === 'accepted' ? 'The expected edge is at or above the configured minimum. That makes it a research candidate—not a guaranteed or executable profit.' : item.rejection_reasons.join(' ')}</p></section><section><span>HOW TO VALIDATE</span><p>Recalculate the spread from the recorded buy ask and sell bid, subtract both venue fees, then compare the result with the minimum edge.</p></section><section><span>WHAT THIS DOES NOT PROVE</span><p>Phase 1 does not yet model quote age, clock skew, depth beyond the top level, latency, partial fills, balances, or orphan-leg risk.</p></section><section><span>NEXT FALSIFIABLE QUESTION</span><p>Does this edge survive realistic execution costs and synchronized venue timestamps?</p></section></div>}
+    <div className="arb-equation"><span><small>Depth-adjusted spread</small>{item.gross_edge_bps.toFixed(4)} bps</span><i>−</i><span><small>Two-leg fees</small>{item.fee_cost_bps.toFixed(4)} bps</span><i>−</i><span><small>Two-leg slippage</small>{item.slippage_cost_bps.toFixed(4)} bps</span><i>=</i><span className={item.expected_edge_bps >= 0 ? 'positive' : 'negative'}><small>Expected edge</small>{item.expected_edge_bps.toFixed(4)} bps</span></div>
+    {mode === 'guided' && <div className="arb-guided-grid"><section><span>WHY THIS DECISION</span><p>{item.decision === 'accepted' ? 'The expected edge is at or above the configured minimum. That makes it a research candidate—not a guaranteed or executable profit.' : item.rejection_reasons.join(' ')}</p></section><section><span>HOW TO VALIDATE</span><p>Walk both recorded books to the requested quantity, recalculate each volume-weighted price, subtract both venue fees and slippage assumptions, then compare with the minimum edge.</p></section><section><span>WHAT THIS DOES NOT PROVE</span><p>Phase 1 does not yet model quote age, clock skew, latency, paired-leg timing, balances, or orphan-leg recovery.</p></section><section><span>NEXT FALSIFIABLE QUESTION</span><p>Does this edge survive realistic execution costs and synchronized venue timestamps?</p></section></div>}
     {mode === 'expert' && <pre>{JSON.stringify(item, null, 2)}</pre>}
     {mode === 'watch' && <div className="arb-watch-progress"><i style={{ width: `${((index + 1) / total) * 100}%` }} /></div>}
     <div className="arb-actions"><button onClick={onReplay} disabled={Boolean(action)}>{action === 'replay' ? 'REPLAYING DATASET…' : 'REPLAY DATASET'}</button><button onClick={onExperiment} disabled={Boolean(action)}>{action === 'experiment' ? 'QUEUEING…' : 'ADD TO EXPERIMENT'}</button><span>Replay reruns the full recorded dataset with these parameters; the selected opportunity is preserved as context.</span></div>

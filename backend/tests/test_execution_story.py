@@ -1,4 +1,6 @@
-from app.research.execution_story import EvidenceKind, StoryMode, build_execution_story
+import pytest
+
+from app.research.execution_story import EvidenceKind, ExecutionRunStore, StoryMode, build_execution_story
 from app.research.orderbook import OrderBookSnapshot, OrderStatus, Side, simulate_order
 
 
@@ -100,3 +102,36 @@ def test_sell_story_uses_bid_liquidity():
     assert result.status == OrderStatus.FILLED
     assert result.average_price == 99.25
     assert rendered["title"].startswith("Sell BTC")
+
+
+def test_story_materializes_iterables_and_exports_reflection():
+    book = snapshot(asks=[[100, 1]])
+    result = simulate_order(book, Side.BUY, 1.0, fee_bps=10)
+    story = build_execution_story(
+        book,
+        Side.BUY,
+        result,
+        intent="Test",
+        hypothesis="It fills",
+        assumptions=(item for item in ["Fresh book"]),
+        risks=(item for item in ["Fees"]),
+        post_run_reflection="The measured fill matched the hypothesis.",
+    )
+
+    rendered = story.render(StoryMode.GUIDED)
+    assert rendered["assumptions"] == ["Fresh book"]
+    assert rendered["risks"] == ["Fees"]
+    assert rendered["postRunReflection"].startswith("The measured")
+    assert rendered["export"]["postRunReflection"] == rendered["postRunReflection"]
+
+
+def test_execution_run_store_persists_immutable_exports(tmp_path):
+    store = ExecutionRunStore(tmp_path)
+    payload = {"run_id": "run-1", "execution": {"status": "filled"}}
+
+    stored = store.save("run-1", payload)
+
+    assert store.get("run-1")["execution"]["status"] == "filled"
+    assert stored["created_at"]
+    with pytest.raises(FileExistsError):
+        store.save("run-1", payload)

@@ -6,6 +6,8 @@ import pytest
 
 from app.exchanges.base import ExchangeAdapterError
 from app.exchanges.bybit import BybitAdapter, _normalize_symbol as normalize_bybit
+from app.exchanges.bitmex import _normalize_symbol as normalize_bitmex
+from app.exchanges.hyperliquid import _interval_delta, _normalize_symbol as normalize_hyperliquid
 from app.exchanges.whitebit import WhiteBITAdapter, _normalize_symbol as normalize_whitebit
 from app.models import ExchangeName, MarketDataRequest
 
@@ -52,8 +54,34 @@ def request(exchange: ExchangeName) -> MarketDataRequest:
 def test_symbol_normalization_handles_common_perpetual_forms():
     assert normalize_bybit("BTC/USDT-PERP") == "BTCUSDT"
     assert normalize_bybit("BTCUSDT") == "BTCUSDT"
+    assert normalize_hyperliquid("BTC/USDT-PERP") == "BTC"
+    assert normalize_bitmex("BTC/USDT-PERP") == "XBTUSD"
     assert normalize_whitebit("BTC/USDT-PERP") == "BTC_USDT"
     assert normalize_whitebit("BTCUSDT", demo=True) == "DBTC_DUSDT"
+
+
+def test_hyperliquid_weekly_window_uses_weeks():
+    assert _interval_delta("1w", 3).days == 21
+
+
+def test_order_book_adapters_separate_canonical_and_venue_symbols(monkeypatch):
+    FakeClient.response = FakeResponse(
+        {
+            "retCode": 0,
+            "result": {"ts": "1700000000000", "u": "9", "b": [["99", "1"]], "a": [["100", "1"]]},
+        }
+    )
+    monkeypatch.setattr("app.exchanges.bybit.httpx.AsyncClient", FakeClient)
+    bybit = asyncio.run(BybitAdapter().fetch_order_book("BTC/USDT-PERP"))
+
+    FakeClient.response = FakeResponse(
+        {"timestamp": 9, "bids": [["99", "1"]], "asks": [["100", "1"]]}
+    )
+    monkeypatch.setattr("app.exchanges.whitebit.httpx.AsyncClient", FakeClient)
+    whitebit = asyncio.run(WhiteBITAdapter().fetch_order_book("BTC/USDT-PERP"))
+
+    assert (bybit["symbol"], bybit["venue_symbol"]) == ("BTC", "BTCUSDT")
+    assert (whitebit["symbol"], whitebit["venue_symbol"]) == ("BTC", "BTC_USDT")
 
 
 def test_bybit_candles_are_reversed_to_chronological_order(monkeypatch):

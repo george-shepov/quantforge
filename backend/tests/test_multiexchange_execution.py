@@ -16,6 +16,13 @@ def test_exchange_testnet_endpoints_are_explicit_and_read_only():
     assert not bitmex.execution_allowed
 
 
+def test_environment_routes_accept_configured_string_values():
+    endpoint = endpoints_for("bybit", "demo")
+
+    assert endpoint.environment == ExchangeEnvironment.DEMO
+    assert "demo" in endpoint.rest
+
+
 def test_mainnet_submission_is_always_blocked():
     try:
         assert_no_mainnet_execution(ExchangeEnvironment.MAINNET_READONLY, submit=True)

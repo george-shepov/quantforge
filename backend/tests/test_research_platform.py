@@ -5,7 +5,9 @@ import pytest
 from app.research.engine import (
     BookQuote,
     CrossExchangeArbitrageEngine,
+    DeterministicReplayEngine,
     InventoryMarketMaker,
+    make_strategy,
     monte_carlo_resample,
     parameter_combinations,
     scan_arbitrage_events,
@@ -118,6 +120,75 @@ def test_arbitrage_scan_retains_only_the_bounded_response_window() -> None:
     assert output["candidate_count"] == 3
     assert len(output["opportunities"]) == 3
     assert output["accepted_count"] + output["rejected_count"] == 3
+
+
+def test_arbitrage_accounts_for_depth_and_slippage() -> None:
+    engine = CrossExchangeArbitrageEngine(min_edge_bps=0, fee_bps=1, max_quantity=2, slippage_bps=2)
+    engine.update(
+        BookQuote(
+            "a", "BTC", 99, 100, 2, 2, 1,
+            ask_levels=((100, 1), (101, 1)),
+        )
+    )
+    opportunities = engine.update(
+        BookQuote(
+            "b", "BTC", 101, 102, 2, 2, 1,
+            bid_levels=((102, 1), (101, 1)),
+        )
+    )
+
+    assert opportunities
+    opportunity = opportunities[0]
+    assert opportunity.quantity == 2
+    assert opportunity.buy_price == 100.5
+    assert opportunity.sell_price == 101.5
+    assert opportunity.expected_edge_bps < opportunity.gross_edge_bps
+    assert opportunity.slippage_bps == 2
+
+
+def test_event_ingestion_matches_venue_symbols_and_replay_walks_depth() -> None:
+    def book(sequence: int, exchange: str, symbol: str, bids, asks) -> MarketEvent:
+        return MarketEvent.build(
+            sequence=sequence,
+            exchange=exchange,
+            symbol=symbol,
+            kind=EventKind.BOOK,
+            event_time_ns=sequence * 1_000_000,
+            receive_time_ns=sequence * 1_000_000,
+            payload={
+                "levels": [
+                    [{"px": str(price), "sz": str(size)} for price, size in bids],
+                    [{"px": str(price), "sz": str(size)} for price, size in asks],
+                ]
+            },
+        )
+
+    events = [
+        book(1, "bybit", "BTCUSDT", [(99, 1)], [(100, 0.5), (101, 1.5)]),
+        book(2, "whitebit", "BTC_USDT", [(103, 0.5), (102, 1.5)], [(104, 1)]),
+        book(3, "hyperliquid", "BTC", [(102.5, 2)], [(103.5, 2)]),
+    ]
+
+    scan = scan_arbitrage_events(events, dataset_id="canonical-depth", min_edge_bps=0, max_quantity=2)
+    replay = DeterministicReplayEngine(fee_bps=0).run(
+        events[:2],
+        make_strategy(
+            "cross_exchange_arbitrage",
+            {"min_edge_bps": 0, "fee_bps": 0, "max_quantity": 2},
+        ),
+    )
+
+    assert scan["accepted_count"] > 0
+    assert {item["symbol"] for item in scan["opportunities"]} == {"BTC"}
+    assert any(
+        {item["buy_exchange"], item["sell_exchange"]} == {"bybit", "whitebit"}
+        for item in scan["opportunities"]
+    )
+    assert replay.fill_count == 2
+    assert [intent["filled_quantity"] for intent in replay.intents[-2:]] == [2, 2]
+    assert replay.intents[-2]["fill_price"] == pytest.approx(100.75)
+    assert replay.intents[-1]["fill_price"] == pytest.approx(102.25)
+    assert all(intent["residual_quantity"] == 0 for intent in replay.intents[-2:])
 
 
 def test_inventory_quotes_skew_away_from_long_inventory() -> None:
