@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import itertools
 import math
 import random
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
 from pydantic import BaseModel, Field
@@ -130,6 +131,32 @@ class ArbitrageOpportunity:
     expected_edge_bps: float
 
 
+@dataclass(frozen=True)
+class ArbitrageCandidate:
+    symbol: str
+    buy_exchange: str
+    sell_exchange: str
+    buy_price: float
+    sell_price: float
+    quantity: float
+    gross_edge_bps: float
+    fee_cost_bps: float
+    expected_edge_bps: float
+    estimated_profit: float
+    decision: str
+    rejection_reasons: tuple[str, ...]
+
+    @property
+    def explanation(self) -> str:
+        arithmetic = (
+            f"Gross edge {self.gross_edge_bps:.4f} bps - fees {self.fee_cost_bps:.4f} bps "
+            f"= expected edge {self.expected_edge_bps:.4f} bps."
+        )
+        if self.decision == "accepted":
+            return f"{arithmetic} The expected edge meets the configured threshold."
+        return f"{arithmetic} {' '.join(self.rejection_reasons)}"
+
+
 class CrossExchangeArbitrageEngine:
     def __init__(self, min_edge_bps: float = 5.0, fee_bps: float = 2.0, max_quantity: float = 1.0) -> None:
         self.min_edge_bps = min_edge_bps
@@ -141,28 +168,143 @@ class CrossExchangeArbitrageEngine:
         self.books[(quote.exchange, quote.symbol)] = quote
         return self.scan(quote.symbol)
 
+    def update_candidates(self, quote: BookQuote) -> list[ArbitrageCandidate]:
+        self.books[(quote.exchange, quote.symbol)] = quote
+        return self.scan_candidates(quote.symbol)
+
     def scan(self, symbol: str) -> list[ArbitrageOpportunity]:
+        opportunities = [
+            ArbitrageOpportunity(
+                symbol=item.symbol,
+                buy_exchange=item.buy_exchange,
+                sell_exchange=item.sell_exchange,
+                buy_price=item.buy_price,
+                sell_price=item.sell_price,
+                quantity=item.quantity,
+                gross_edge_bps=item.gross_edge_bps,
+                expected_edge_bps=item.expected_edge_bps,
+            )
+            for item in self.scan_candidates(symbol)
+            if item.decision == "accepted"
+        ]
+        return sorted(opportunities, key=lambda item: item.expected_edge_bps, reverse=True)
+
+    def scan_candidates(self, symbol: str) -> list[ArbitrageCandidate]:
         books = [book for (_, candidate), book in self.books.items() if candidate == symbol]
-        opportunities: list[ArbitrageOpportunity] = []
+        candidates: list[ArbitrageCandidate] = []
         for buy, sell in itertools.permutations(books, 2):
             if buy.exchange == sell.exchange or buy.ask <= 0:
                 continue
             gross = (sell.bid - buy.ask) / buy.ask * 10_000
-            expected = gross - 2 * self.fee_bps
-            if expected >= self.min_edge_bps:
-                opportunities.append(
-                    ArbitrageOpportunity(
-                        symbol=symbol,
-                        buy_exchange=buy.exchange,
-                        sell_exchange=sell.exchange,
-                        buy_price=buy.ask,
-                        sell_price=sell.bid,
-                        quantity=min(buy.ask_size, sell.bid_size, self.max_quantity),
-                        gross_edge_bps=gross,
-                        expected_edge_bps=expected,
-                    )
+            fee_cost = 2 * self.fee_bps
+            expected = gross - fee_cost
+            quantity = min(buy.ask_size, sell.bid_size, self.max_quantity)
+            accepted = expected >= self.min_edge_bps
+            reasons: tuple[str, ...] = () if accepted else (
+                f"Rejected because expected edge {expected:.4f} bps is below the "
+                f"{self.min_edge_bps:.4f} bps minimum.",
+            )
+            candidates.append(
+                ArbitrageCandidate(
+                    symbol=symbol,
+                    buy_exchange=buy.exchange,
+                    sell_exchange=sell.exchange,
+                    buy_price=buy.ask,
+                    sell_price=sell.bid,
+                    quantity=quantity,
+                    gross_edge_bps=gross,
+                    fee_cost_bps=fee_cost,
+                    expected_edge_bps=expected,
+                    estimated_profit=buy.ask * quantity * expected / 10_000,
+                    decision="accepted" if accepted else "rejected",
+                    rejection_reasons=reasons,
                 )
-        return sorted(opportunities, key=lambda item: item.expected_edge_bps, reverse=True)
+            )
+        return sorted(candidates, key=lambda item: item.expected_edge_bps, reverse=True)
+
+
+def book_quote_from_event(event: MarketEvent) -> BookQuote | None:
+    if event.kind != EventKind.BOOK:
+        return None
+    levels = event.payload.get("levels")
+    if not isinstance(levels, list) or len(levels) < 2 or not levels[0] or not levels[1]:
+        return None
+    try:
+        bid, ask = levels[0][0], levels[1][0]
+        return BookQuote(
+            exchange=event.exchange,
+            symbol=event.symbol,
+            bid=float(bid["px"]),
+            ask=float(ask["px"]),
+            bid_size=float(bid["sz"]),
+            ask_size=float(ask["sz"]),
+            timestamp_ns=event.event_time_ns,
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def scan_arbitrage_events(
+    events: Iterable[MarketEvent],
+    *,
+    dataset_id: str,
+    min_edge_bps: float = 5.0,
+    fee_bps: float = 2.0,
+    max_quantity: float = 1.0,
+    limit: int = 500,
+) -> dict[str, Any]:
+    engine = CrossExchangeArbitrageEngine(min_edge_bps, fee_bps, max_quantity)
+    rows: list[dict[str, Any]] = []
+    event_count = 0
+    for event in sorted(events, key=event_sort_key):
+        event_count += 1
+        quote = book_quote_from_event(event)
+        if quote is None:
+            continue
+        for candidate in engine.update_candidates(quote):
+            identity = "|".join(
+                (
+                    dataset_id,
+                    event.checksum,
+                    candidate.symbol,
+                    candidate.buy_exchange,
+                    candidate.sell_exchange,
+                    f"{min_edge_bps:.12g}",
+                    f"{fee_bps:.12g}",
+                    f"{max_quantity:.12g}",
+                )
+            )
+            rows.append(
+                {
+                    "opportunity_id": hashlib.sha256(identity.encode()).hexdigest()[:20],
+                    "timestamp_ns": event.event_time_ns,
+                    "source_event_checksum": event.checksum,
+                    **asdict(candidate),
+                    "rejection_reasons": list(candidate.rejection_reasons),
+                    "explanation": candidate.explanation,
+                }
+            )
+    rows = rows[-max(limit, 1) :]
+    accepted = sum(row["decision"] == "accepted" for row in rows)
+    return {
+        "dataset_id": dataset_id,
+        "strategy": "cross_exchange_arbitrage",
+        "event_count": event_count,
+        "candidate_count": len(rows),
+        "accepted_count": accepted,
+        "rejected_count": len(rows) - accepted,
+        "parameters": {
+            "min_edge_bps": min_edge_bps,
+            "fee_bps": fee_bps,
+            "max_quantity": max_quantity,
+        },
+        "opportunities": rows,
+        "safety": {
+            "environment": "simulation",
+            "order_submission": False,
+            "message": "Replay analysis only. No orders are signed or submitted.",
+        },
+    }
 
 
 @dataclass
@@ -450,24 +592,11 @@ class DeterministicReplayEngine:
             except (KeyError, TypeError, ValueError):
                 pass
         elif event.kind == EventKind.BOOK:
-            levels = event.payload.get("levels")
-            if not isinstance(levels, list) or len(levels) < 2 or not levels[0] or not levels[1]:
+            quote = book_quote_from_event(event)
+            if quote is None:
                 return
-            try:
-                bid, ask = levels[0][0], levels[1][0]
-                quote = BookQuote(
-                    exchange=event.exchange,
-                    symbol=event.symbol,
-                    bid=float(bid["px"]),
-                    ask=float(ask["px"]),
-                    bid_size=float(bid["sz"]),
-                    ask_size=float(ask["sz"]),
-                    timestamp_ns=event.event_time_ns,
-                )
-                books[(event.exchange, event.symbol)] = quote
-                portfolio.mark(event.exchange, event.symbol, (quote.bid + quote.ask) / 2)
-            except (KeyError, TypeError, ValueError):
-                return
+            books[(event.exchange, event.symbol)] = quote
+            portfolio.mark(event.exchange, event.symbol, (quote.bid + quote.ask) / 2)
 
     def _simulate_fill(
         self, intent: OrderIntent, books: dict[tuple[str, str], BookQuote], timestamp_ns: int

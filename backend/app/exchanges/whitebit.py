@@ -34,12 +34,16 @@ class WhiteBITAdapter(ExchangeAdapter):
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(f"{endpoint.rest}/public/kline", params=params)
+                response = await client.get(_kline_url(endpoint.rest), params=params)
                 response.raise_for_status()
                 payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise ExchangeAdapterError(f"WhiteBIT market-data request failed: {exc}") from exc
 
+        if isinstance(payload, dict) and payload.get("success") is False:
+            raise ExchangeAdapterError(
+                f"WhiteBIT rejected market-data request: {payload.get('message') or 'unknown error'}"
+            )
         if isinstance(payload, list):
             rows = payload
         elif isinstance(payload, dict):
@@ -90,6 +94,13 @@ class WhiteBITAdapter(ExchangeAdapter):
             "asks": [[float(p), float(q)] for p, q in payload.get("asks", [])],
             "environment": environment.value,
         }
+
+
+def _kline_url(rest_url: str) -> str:
+    """WhiteBIT keeps Kline on v1 while its other public REST endpoints use v4."""
+
+    origin = rest_url.split("/api/", 1)[0].rstrip("/")
+    return f"{origin}/api/v1/public/kline"
 
 
 def _normalize_symbol(symbol: str, demo: bool = False) -> str:

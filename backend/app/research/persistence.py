@@ -121,10 +121,13 @@ def run_experiment(config: ExperimentConfig) -> dict[str, Any]:
     events = EventDatasetCatalog().read(config.dataset_id)
     if not events:
         raise ValueError("Dataset contains no events")
-    replay_engine = DeterministicReplayEngine(timer_interval_ms=config.timer_interval_ms)
     windows = walk_forward_windows(len(events), config.walk_forward_folds)
     candidates: list[dict[str, Any]] = []
     for parameters in parameter_combinations(config.base_parameters, config.parameter_grid):
+        replay_engine = DeterministicReplayEngine(
+            timer_interval_ms=config.timer_interval_ms,
+            fee_bps=float(parameters.get("fee_bps", 2.0)),
+        )
         folds: list[dict[str, Any]] = []
         returns: list[float] = []
         for fold_index, (_, test_slice) in enumerate(windows):

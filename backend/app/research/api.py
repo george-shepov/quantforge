@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .engine import DeterministicReplayEngine, make_strategy
+from .engine import DeterministicReplayEngine, make_strategy, scan_arbitrage_events
 from .events import EventDatasetCatalog, RecorderConfig, RecorderManager
 from .execution import HyperliquidTestnetAdapter, TestnetOrderRequest, TestnetSafetyGate
 from .execution_story import StoryMode, build_execution_story
@@ -33,6 +33,14 @@ class ReplayRequest(BaseModel):
     timer_interval_ms: int = Field(default=1_000, ge=1, le=3_600_000)
 
 
+class ArbitrageScanRequest(BaseModel):
+    dataset_id: str
+    min_edge_bps: float = Field(default=5.0, ge=-10_000, le=10_000)
+    fee_bps: float = Field(default=2.0, ge=0, le=1_000)
+    max_quantity: float = Field(default=1.0, gt=0)
+    limit: int = Field(default=500, ge=1, le=5_000)
+
+
 class ExecutionStoryRequest(BaseModel):
     snapshot: dict[str, Any]
     side: str = "buy"
@@ -54,7 +62,7 @@ def capabilities() -> dict[str, Any]:
         "datasets": ["partitioned_parquet", "manifest_catalog", "checksum_chain", "deterministic_replay"],
         "strategy_callbacks": ["on_book", "on_trade", "on_funding", "on_timer"],
         "portfolio": ["multi_asset", "multi_exchange", "cross_exchange_arbitrage"],
-        "research": ["parameter_sweeps", "walk_forward", "block_monte_carlo"],
+        "research": ["arbitrage_decision_projection", "parameter_sweeps", "walk_forward", "block_monte_carlo"],
         "microstructure": ["inventory_skew", "queue_position"],
         "persistence": ["postgresql", "redis_rq_worker"],
         "execution": TestnetSafetyGate().status(),
@@ -107,8 +115,27 @@ def replay(request: ReplayRequest) -> dict[str, Any]:
         strategy = make_strategy(request.strategy, request.parameters)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result = DeterministicReplayEngine(request.timer_interval_ms).run(events, strategy, request.starting_cash)
+    result = DeterministicReplayEngine(
+        request.timer_interval_ms,
+        fee_bps=float(request.parameters.get("fee_bps", 2.0)),
+    ).run(events, strategy, request.starting_cash)
     return result.model_dump(mode="json")
+
+
+@router.post("/arbitrage/scan")
+def scan_arbitrage(request: ArbitrageScanRequest) -> dict[str, Any]:
+    try:
+        events = catalog.read(request.dataset_id)
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return scan_arbitrage_events(
+        events,
+        dataset_id=request.dataset_id,
+        min_edge_bps=request.min_edge_bps,
+        fee_bps=request.fee_bps,
+        max_quantity=request.max_quantity,
+        limit=request.limit,
+    )
 
 
 @router.post("/experiments", status_code=202)

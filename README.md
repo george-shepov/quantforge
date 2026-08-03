@@ -67,6 +67,22 @@ The event engine includes:
 - Inventory-skewed market-making quotes
 - Seeded queue-ahead and trade-through fill simulation
 
+Phase 1 of the Arbitrage Lab adds a deterministic decision projection over the existing
+`cross_exchange_arbitrage` strategy. It reports accepted and rejected venue pairs with the
+same gross-edge, two-leg fee, and minimum-edge calculation used by replay. Every row includes
+the available quantity, estimated profit, stable opportunity ID, arithmetic explanation, and
+an explicit rejection reason. The projection is analysis-only and has no order-submission path.
+
+The dedicated **Arbitrage** workspace renders that projection as a Coinbase Pro-density
+opportunity tape with responsive mobile cards. Build, Guided, Expert, and Watch & Learn modes
+share the exact same response data: Build exposes assumptions, Guided teaches the decision,
+Expert preserves compact raw evidence, and Watch & Learn advances through replay candidates as
+a lesson. Accepted and rejected filters never remove the explanation attached to a candidate.
+From any selected row, **Replay opportunity** reruns the source dataset with the exact scanner
+parameters, while **Add to experiment** queues those parameters in the existing walk-forward and
+Monte Carlo research pipeline. These handoffs preserve the opportunity ID and evidence in local
+history and do not introduce an execution endpoint.
+
 ### Experiment system
 
 Experiments support:
@@ -126,6 +142,27 @@ curl -X POST http://localhost:8008/api/research/replay \
   }'
 ```
 
+## Arbitrage Lab scanner
+
+```bash
+curl -X POST http://localhost:8008/api/research/arbitrage/scan \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dataset_id":"<dataset-id>",
+    "min_edge_bps":5,
+    "fee_bps":2,
+    "max_quantity":1,
+    "limit":500
+  }'
+```
+
+The scanner deliberately includes rejected candidates. `explanation` shows the arithmetic and
+`rejection_reasons` states why a candidate failed the configured threshold. Its response safety
+metadata always reports `order_submission: false`.
+
+See [Arbitrage Lab Phase 1](docs/arbitrage-lab-phase-1.md) for the calculation contract,
+presentation modes, course-engine mapping, safety boundary, and acceptance matrix.
+
 ## Queue an experiment
 
 ```bash
@@ -164,6 +201,12 @@ The original MVP remains available at `POST /api/backtests/run` with:
 - Fees, slippage, leverage, funding, liquidation, stops, and targets
 - EMA crossover, mean reversion, and breakout strategies
 - Stress scenarios and performance metrics
+
+WhiteBIT candlesticks use its documented V1 Kline route while its other public REST APIs remain
+on V4. Bybit documents HTTP 403 responses for API requests from restricted regions, including US
+IP addresses; QuantForge reports that restriction explicitly and uses deterministic synthetic
+fallback when enabled. Live Bybit research should run only from a region permitted by Bybit's
+current terms.
 
 ## Development
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.research.engine import (
     BookQuote,
     CrossExchangeArbitrageEngine,
@@ -41,6 +43,23 @@ def test_cross_exchange_arbitrage_detects_net_edge() -> None:
     assert opportunities[0].buy_exchange == "a"
     assert opportunities[0].sell_exchange == "b"
     assert opportunities[0].quantity == 2
+
+
+def test_arbitrage_candidates_preserve_calculation_and_explain_rejection() -> None:
+    engine = CrossExchangeArbitrageEngine(min_edge_bps=5, fee_bps=2, max_quantity=1)
+    engine.update(BookQuote("buy", "BTC", 99, 100, 3, 0.8, 1))
+
+    candidates = engine.update_candidates(BookQuote("sell", "BTC", 100.05, 101, 0.4, 2, 2))
+
+    accepted = engine.scan("BTC")
+    assert not accepted
+    rejected = next(item for item in candidates if item.buy_exchange == "buy" and item.sell_exchange == "sell")
+    assert rejected.gross_edge_bps == pytest.approx(5)
+    assert rejected.fee_cost_bps == 4
+    assert rejected.expected_edge_bps == pytest.approx(1)
+    assert rejected.quantity == 0.4
+    assert rejected.decision == "rejected"
+    assert "below" in rejected.explanation
 
 
 def test_inventory_quotes_skew_away_from_long_inventory() -> None:

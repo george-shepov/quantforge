@@ -3,7 +3,9 @@ export type EventStrategyName = 'cross_exchange_arbitrage' | 'inventory_market_m
 export type ScenarioName = 'baseline' | 'flash_crash' | 'volatility_spike' | 'liquidity_drought' | 'funding_squeeze'
 export type ExchangeName = 'hyperliquid' | 'bybit' | 'bitmex' | 'whitebit' | 'synthetic'
 export type MarketKind = 'spot' | 'perp' | 'future'
-export type WorkspaceName = 'backtest' | 'recordings' | 'replay' | 'experiments' | 'manual' | 'system' | 'history'
+export type WorkspaceName = 'backtest' | 'arbitrage' | 'recordings' | 'replay' | 'experiments' | 'manual' | 'system' | 'history'
+export type ArbitrageMode = 'build' | 'guided' | 'expert' | 'watch'
+export type ArbitrageDecision = 'accepted' | 'rejected'
 export type StoryMode = 'expert' | 'guided'
 
 export interface RunConfig {
@@ -173,6 +175,49 @@ export interface ReplayResponse {
   equity_curve: Array<{ timestamp_ns: number; equity: number }>
 }
 
+export interface ArbitrageScanRequest {
+  dataset_id: string
+  min_edge_bps: number
+  fee_bps: number
+  max_quantity: number
+  limit: number
+}
+
+export interface ArbitrageOpportunity {
+  opportunity_id: string
+  timestamp_ns: number
+  source_event_checksum: string
+  symbol: string
+  buy_exchange: string
+  sell_exchange: string
+  buy_price: number
+  sell_price: number
+  quantity: number
+  gross_edge_bps: number
+  fee_cost_bps: number
+  expected_edge_bps: number
+  estimated_profit: number
+  decision: ArbitrageDecision
+  rejection_reasons: string[]
+  explanation: string
+}
+
+export interface ArbitrageScanResponse {
+  dataset_id: string
+  strategy: 'cross_exchange_arbitrage'
+  event_count: number
+  candidate_count: number
+  accepted_count: number
+  rejected_count: number
+  parameters: Omit<ArbitrageScanRequest, 'dataset_id' | 'limit'>
+  opportunities: ArbitrageOpportunity[]
+  safety: {
+    environment: 'simulation'
+    order_submission: false
+    message: string
+  }
+}
+
 export interface MonteCarloSummary {
   p05: number
   median: number
@@ -269,7 +314,7 @@ export interface ExecutionStoryResponse {
 
 export interface HistoryEntry {
   id: string
-  kind: 'backtest' | 'replay' | 'experiment' | 'story'
+  kind: 'backtest' | 'arbitrage' | 'replay' | 'experiment' | 'story'
   title: string
   createdAt: string
   summary: string

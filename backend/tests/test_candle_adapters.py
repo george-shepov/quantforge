@@ -1,16 +1,25 @@
 import asyncio
 from datetime import datetime, timezone
 
+import httpx
+import pytest
+
+from app.exchanges.base import ExchangeAdapterError
 from app.exchanges.bybit import BybitAdapter, _normalize_symbol as normalize_bybit
 from app.exchanges.whitebit import WhiteBITAdapter, _normalize_symbol as normalize_whitebit
 from app.models import ExchangeName, MarketDataRequest
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self.payload = payload
+        self.status_code = status_code
 
     def raise_for_status(self):
+        if self.status_code >= 400:
+            request = httpx.Request("GET", "https://api.bybit.com/v5/market/kline")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError("blocked", request=request, response=response)
         return None
 
     def json(self):
@@ -62,7 +71,7 @@ def test_bybit_candles_are_reversed_to_chronological_order(monkeypatch):
 
 def test_whitebit_candles_map_documented_array_order(monkeypatch):
     rows = [[1_700_000_000 + index * 3_600, "1", "2", "3", "0", "4"] for index in range(100)]
-    FakeClient.response = FakeResponse(list(reversed(rows)))
+    FakeClient.response = FakeResponse({"success": True, "message": None, "result": list(reversed(rows))})
     monkeypatch.setattr("app.exchanges.whitebit.httpx.AsyncClient", FakeClient)
 
     candles = asyncio.run(WhiteBITAdapter().fetch_candles(request(ExchangeName.WHITEBIT)))
@@ -72,5 +81,14 @@ def test_whitebit_candles_map_documented_array_order(monkeypatch):
     assert candles[0].high == 3
     assert candles[0].low == 0
     assert candles[-1].timestamp == datetime.fromtimestamp(1_700_000_000 + 99 * 3_600, tz=timezone.utc)
+    assert FakeClient.request[0] == "https://whitebit.com/api/v1/public/kline"
     assert FakeClient.request[1]["market"] == "BTC_USDT"
     assert FakeClient.request[1]["interval"] == "1h"
+
+
+def test_bybit_403_explains_the_regional_block(monkeypatch):
+    FakeClient.response = FakeResponse({}, status_code=403)
+    monkeypatch.setattr("app.exchanges.bybit.httpx.AsyncClient", FakeClient)
+
+    with pytest.raises(ExchangeAdapterError, match="Bybit-permitted region"):
+        asyncio.run(BybitAdapter().fetch_candles(request(ExchangeName.BYBIT)))

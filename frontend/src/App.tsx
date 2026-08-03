@@ -29,6 +29,7 @@ import {
 import { MetricGrid } from './components/MetricGrid'
 import { PerformanceChart } from './components/PerformanceChart'
 import { TradesTable } from './components/TradesTable'
+import { ArbitrageWorkspace } from './components/ArbitrageWorkspace'
 import type {
   BacktestResponse,
   CatalogResponse,
@@ -79,7 +80,7 @@ const defaultStoryRequest: ExecutionStoryRequest = {
 }
 
 const tabs: Array<[WorkspaceName, string]> = [
-  ['backtest', 'Backtest'], ['recordings', 'Record'], ['replay', 'Replay'], ['experiments', 'Experiments'],
+  ['backtest', 'Backtest'], ['arbitrage', 'Arbitrage'], ['recordings', 'Record'], ['replay', 'Replay'], ['experiments', 'Experiments'],
   ['manual', 'Trading manual'], ['system', 'System'], ['history', 'History'],
 ]
 
@@ -151,6 +152,7 @@ export default function App() {
       </section>
 
       {workspace === 'backtest' && <BacktestWorkspace catalog={catalog} remember={remember} />}
+      {workspace === 'arbitrage' && <ArbitrageWorkspace datasets={datasets} remember={remember} onChanged={refreshPlatform} />}
       {workspace === 'recordings' && <RecordingWorkspace recordings={recordings} datasets={datasets} onChanged={refreshPlatform} />}
       {workspace === 'replay' && <ReplayWorkspace datasets={datasets} remember={remember} />}
       {workspace === 'experiments' && <ExperimentWorkspace datasets={datasets} experiments={experiments} onChanged={refreshPlatform} remember={remember} />}
