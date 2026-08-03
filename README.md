@@ -119,11 +119,23 @@ docker compose up --build
 Open:
 
 - Terminal: http://localhost:4173
+- EU Xchange Miner: http://localhost:4173/eu-miner
 - API docs: http://localhost:8008/docs
 - Health: http://localhost:8008/api/health
 - Research capabilities: http://localhost:8008/api/research/capabilities
 
 When deployed behind the shared VPS edge, open `https://quantforge.giorgiy.org`. The frontend proxies `/api`, `/docs`, and `/openapi.json` to the internal API service; no application port is published on the VPS host.
+
+## EU Xchange Miner
+
+The frontend includes a dedicated European observation-node and product-showcase page at
+`/eu-miner`. It becomes the root experience when served from either
+`eu.quantforge.giorgiy.org` or `miner.quantforge.giorgiy.org`; the primary QuantForge
+hostname continues to open the research terminal.
+
+The page reports API reachability, public exchange feeds, simulation-only safety status,
+and the deterministic dataset pipeline. It also provides a video-ready product-demo slot
+plus promotion surfaces for the starter course and two companion books.
 
 ## Record market events
 
