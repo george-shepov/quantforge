@@ -86,9 +86,9 @@ def test_whitebit_candles_map_documented_array_order(monkeypatch):
     assert FakeClient.request[1]["interval"] == "1h"
 
 
-def test_bybit_403_explains_the_regional_block(monkeypatch):
+def test_bybit_403_lists_documented_possible_causes(monkeypatch):
     FakeClient.response = FakeResponse({}, status_code=403)
     monkeypatch.setattr("app.exchanges.bybit.httpx.AsyncClient", FakeClient)
 
-    with pytest.raises(ExchangeAdapterError, match="Bybit-permitted region"):
+    with pytest.raises(ExchangeAdapterError, match="IP rate limiting"):
         asyncio.run(BybitAdapter().fetch_candles(request(ExchangeName.BYBIT)))

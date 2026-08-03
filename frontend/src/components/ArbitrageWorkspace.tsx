@@ -22,7 +22,7 @@ interface Props {
 export const modeGuidance: Record<ArbitrageMode, string> = {
   build: 'Choose the evidence and assumptions that define this replay scan.',
   guided: 'Follow the arithmetic from displayed spread to an accepted or rejected decision.',
-  expert: 'Inspect the compact decision record and source checksum without tutorial copy.',
+  expert: 'Inspect the compact decision record and both source checksums without tutorial copy.',
   watch: 'Step through candidates as a narrated lesson generated from replay evidence.',
 }
 
@@ -95,7 +95,7 @@ export function ArbitrageWorkspace({ datasets, remember, onChanged }: Props) {
     }
   }
 
-  async function replayOpportunity(item: ArbitrageOpportunity) {
+  async function replayDatasetFromOpportunity(item: ArbitrageOpportunity) {
     if (!result) return
     setAction('replay')
     setActionMessage('')
@@ -111,11 +111,11 @@ export function ArbitrageWorkspace({ datasets, remember, onChanged }: Props) {
       const output = await replayDataset(config)
       remember({
         kind: 'replay',
-        title: `Opportunity replay · ${item.opportunity_id}`,
-        summary: `${output.fill_count} fills · ${output.return_pct.toFixed(4)}% return`,
+        title: `Dataset replay · ${result.dataset_id}`,
+        summary: `${output.fill_count} fills · ${output.return_pct.toFixed(4)}% return · from ${item.opportunity_id}`,
         payload: { opportunity: item, config, output },
       })
-      setActionMessage(`Replay complete: ${output.fill_count} fills, ${output.return_pct.toFixed(4)}% modeled return.`)
+      setActionMessage(`Dataset replay complete: ${output.fill_count} fills, ${output.return_pct.toFixed(4)}% modeled return.`)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
     } finally {
@@ -207,7 +207,7 @@ export function ArbitrageWorkspace({ datasets, remember, onChanged }: Props) {
             <table className="arb-table"><thead><tr><th>Status</th><th>Symbol</th><th>Buy venue</th><th>Sell venue</th><th>Gross edge</th><th>Expected edge</th><th>Available qty</th><th>Est. profit</th></tr></thead><tbody>{visible.map((item) => <tr key={item.opportunity_id} className={selected?.opportunity_id === item.opportunity_id ? 'selected' : ''} onClick={() => setSelectedId(item.opportunity_id)}><td><DecisionPill decision={item.decision} /></td><td>{item.symbol}</td><td>{item.buy_exchange}<small>{number(item.buy_price)}</small></td><td>{item.sell_exchange}<small>{number(item.sell_price)}</small></td><td>{item.gross_edge_bps.toFixed(2)} bps</td><td className={item.expected_edge_bps >= 0 ? 'positive' : 'negative'}>{item.expected_edge_bps.toFixed(2)} bps</td><td>{number(item.quantity)}</td><td className={item.estimated_profit >= 0 ? 'positive' : 'negative'}>{usd(item.estimated_profit)}</td></tr>)}</tbody></table>
           </div>
           <div className="arb-card-list">{visible.map((item) => <button key={item.opportunity_id} className={`arb-opportunity-card ${selected?.opportunity_id === item.opportunity_id ? 'selected' : ''}`} onClick={() => setSelectedId(item.opportunity_id)}><div><DecisionPill decision={item.decision} /><b>{item.symbol}</b><strong className={item.expected_edge_bps >= 0 ? 'positive' : 'negative'}>{item.expected_edge_bps.toFixed(2)} bps</strong></div><p><span>BUY</span>{item.buy_exchange} @ {number(item.buy_price)}</p><p><span>SELL</span>{item.sell_exchange} @ {number(item.sell_price)}</p><footer><span>{number(item.quantity)} available</span><b>{usd(item.estimated_profit)}</b></footer></button>)}</div>
-          {selected && <OpportunityDetail item={selected} mode={mode} index={visible.indexOf(selected)} total={visible.length} action={action} actionMessage={actionMessage} onReplay={() => void replayOpportunity(selected)} onExperiment={() => void addToExperiment(selected)} />}
+          {selected && <OpportunityDetail item={selected} mode={mode} index={visible.indexOf(selected)} total={visible.length} action={action} actionMessage={actionMessage} onReplay={() => void replayDatasetFromOpportunity(selected)} onExperiment={() => void addToExperiment(selected)} />}
         </> : <div className="arb-empty"><b>No {filter === 'all' ? '' : filter} candidates in this replay.</b><p>Try another filter or scan a synchronized multi-venue L2 dataset.</p></div>}
       </section>
     </> : <section className="arb-onboarding surface-card"><span>START WITH EVIDENCE</span><h2>Select a recorded multi-venue dataset</h2><p>The lab deterministically replays order-book events, evaluates both directions between venues, and keeps rejected candidates visible. A failed edge is still a successful lesson.</p><div><b>1</b>Choose a dataset<i /> <b>2</b>State the threshold<i /> <b>3</b>Inspect every decision</div></section>}
@@ -222,9 +222,9 @@ function OpportunityDetail({ item, mode, index, total, action, actionMessage, on
     {mode === 'guided' && <div className="arb-guided-grid"><section><span>WHY THIS DECISION</span><p>{item.decision === 'accepted' ? 'The expected edge is at or above the configured minimum. That makes it a research candidate—not a guaranteed or executable profit.' : item.rejection_reasons.join(' ')}</p></section><section><span>HOW TO VALIDATE</span><p>Recalculate the spread from the recorded buy ask and sell bid, subtract both venue fees, then compare the result with the minimum edge.</p></section><section><span>WHAT THIS DOES NOT PROVE</span><p>Phase 1 does not yet model quote age, clock skew, depth beyond the top level, latency, partial fills, balances, or orphan-leg risk.</p></section><section><span>NEXT FALSIFIABLE QUESTION</span><p>Does this edge survive realistic execution costs and synchronized venue timestamps?</p></section></div>}
     {mode === 'expert' && <pre>{JSON.stringify(item, null, 2)}</pre>}
     {mode === 'watch' && <div className="arb-watch-progress"><i style={{ width: `${((index + 1) / total) * 100}%` }} /></div>}
-    <div className="arb-actions"><button onClick={onReplay} disabled={Boolean(action)}>{action === 'replay' ? 'REPLAYING…' : 'REPLAY OPPORTUNITY'}</button><button onClick={onExperiment} disabled={Boolean(action)}>{action === 'experiment' ? 'QUEUEING…' : 'ADD TO EXPERIMENT'}</button><span>Both actions reuse the recorded dataset and exact scanner parameters.</span></div>
+    <div className="arb-actions"><button onClick={onReplay} disabled={Boolean(action)}>{action === 'replay' ? 'REPLAYING DATASET…' : 'REPLAY DATASET'}</button><button onClick={onExperiment} disabled={Boolean(action)}>{action === 'experiment' ? 'QUEUEING…' : 'ADD TO EXPERIMENT'}</button><span>Replay reruns the full recorded dataset with these parameters; the selected opportunity is preserved as context.</span></div>
     {actionMessage && <p className="arb-action-message">{actionMessage}</p>}
-    <footer><code>{item.opportunity_id}</code><span>source {item.source_event_checksum.slice(0, 14)}…</span><strong>{number(item.quantity)} {item.symbol} · {usd(item.estimated_profit)}</strong></footer>
+    <footer><code>{item.opportunity_id}</code><span>buy {item.buy_source_event_checksum.slice(0, 10)}… · sell {item.sell_source_event_checksum.slice(0, 10)}…</span><strong>{number(item.quantity)} {item.symbol} · {usd(item.estimated_profit)}</strong></footer>
   </article>
 }
 

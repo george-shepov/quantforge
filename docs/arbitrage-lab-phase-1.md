@@ -8,7 +8,7 @@ explainable scanner workspace. It is a research and teaching surface, not an exe
 - The scanner reads recorded datasets and returns analysis.
 - It never signs, submits, or routes an order.
 - The response declares `environment: simulation` and `order_submission: false`.
-- Replaying an opportunity uses `/api/research/replay`.
+- Replaying the dataset from an opportunity uses `/api/research/replay` and preserves the selected row as context.
 - Adding an opportunity to an experiment uses `/api/research/experiments`.
 - Mainnet order submission remains unavailable.
 
@@ -48,10 +48,11 @@ calculation proves executability.
 }
 ```
 
-Each opportunity contains its stable ID, source-event checksum, timestamp, venue route, displayed
-prices, gross and expected edges, two-leg fee cost, available quantity, estimated profit, decision,
-explanation, and rejection reasons. IDs are deterministic for the dataset, source event, route,
-and scanner parameters.
+Each opportunity contains its stable ID, both source-event checksums and timestamps, venue route,
+displayed prices, gross and expected edges, two-leg fee cost, available quantity, estimated profit,
+decision, explanation, and rejection reasons. IDs are deterministic for the dataset, both source
+quotes, route, and scanner parameters. Only pairs involving the updated quote are re-evaluated, and
+the response window is bounded while the dataset is scanned.
 
 ## Presentation modes
 
@@ -59,7 +60,7 @@ and scanner parameters.
 | --- | --- | --- |
 | Build | Configure the dataset, threshold, fee, and maximum quantity; preview future cost terms | Scanner response |
 | Guided | Explain the decision, validation steps, limitations, and next falsifiable question | Scanner response |
-| Expert | Show the compact raw decision record and source checksum | Scanner response |
+| Expert | Show the compact raw decision record and both source checksums | Scanner response |
 | Watch & Learn | Advance through candidates as a narrated replay lesson | Scanner response |
 
 All modes use the same response object. Presentation cannot turn a rejection into an acceptance or
@@ -69,11 +70,11 @@ change any displayed number.
 
 Every Phase 1 scan can become a lab artifact:
 
-- dataset ID and source checksum identify the evidence;
+- dataset ID plus buy/sell quote checksums and timestamps identify the evidence;
 - scanner parameters state the assumptions;
 - the decision and explanation demonstrate the calculation;
 - a rejected candidate becomes a lesson about a failed hypothesis;
-- Replay opportunity records the deterministic run and actual replay metrics;
+- Replay dataset records the deterministic full-dataset run and preserves the selected opportunity as context;
 - Add to experiment sends the exact assumptions to the research queue;
 - local history preserves the opportunity, request, and returned result for reflection.
 
@@ -90,7 +91,7 @@ falsifiable experiment.
 | Required opportunity columns | Desktop opportunity tape and mobile opportunity cards | TypeScript validation |
 | Build, Guided, Watch & Learn | Four modes, including the larger-vision Expert mode | Frontend unit tests |
 | Accepted and rejected explanations | Shared candidate projection with explicit rejection reasons | Backend unit/integration tests |
-| Replay an opportunity | Existing deterministic replay endpoint with exact scanner parameters | Frontend API integration test |
+| Replay from an opportunity | Clearly labeled full-dataset replay with exact scanner parameters and selected-row context | Frontend API integration test |
 | Add parameters to experiment | Existing experiment endpoint with exact scanner parameters | Frontend API integration test |
 | Simulation first / no mainnet | Scanner safety metadata and no execution call in the workspace | Backend integration test |
 | Mobile friendly | Responsive cards, controls, equations, actions, and safe-area-aware shell | Production CSS/build |
