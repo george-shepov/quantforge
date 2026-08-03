@@ -22,6 +22,8 @@ class ExchangeEndpoints:
 
 def endpoints_for(exchange: str, environment: ExchangeEnvironment) -> ExchangeEndpoints:
     exchange = exchange.lower()
+    if isinstance(environment, str):
+        environment = ExchangeEnvironment(environment.lower())
     if environment == ExchangeEnvironment.SIMULATION:
         return ExchangeEndpoints("", None, environment, False)
 

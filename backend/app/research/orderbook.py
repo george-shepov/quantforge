@@ -38,6 +38,23 @@ class OrderBookSnapshot:
     asks: tuple[BookLevel, ...]
     environment: str = "simulation"
 
+    def __post_init__(self) -> None:
+        if not self.exchange or not self.symbol or self.timestamp_ms < 0 or self.sequence < 0:
+            raise ValueError("Order-book snapshot has invalid metadata")
+        try:
+            bids = _normalize_levels(
+                [(level.price, level.quantity) for level in self.bids],
+                reverse=True,
+            )
+            asks = _normalize_levels(
+                [(level.price, level.quantity) for level in self.asks],
+                reverse=False,
+            )
+        except AttributeError as exc:
+            raise ValueError("Order-book levels are invalid") from exc
+        object.__setattr__(self, "bids", bids)
+        object.__setattr__(self, "asks", asks)
+
     @classmethod
     def from_payload(cls, payload: dict) -> "OrderBookSnapshot":
         if not isinstance(payload, dict):

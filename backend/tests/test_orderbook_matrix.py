@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from app.research.orderbook import OrderBookSnapshot, OrderStatus, Side, replay_snapshots, simulate_order
+from app.research.orderbook import BookLevel, OrderBookSnapshot, OrderStatus, Side, replay_snapshots, simulate_order
 
 
 def book(*, asks=(), bids=(), timestamp_ms=1000, sequence=1):
@@ -85,6 +85,20 @@ def test_snapshot_levels_are_sorted_deduplicated_and_checksum_stable():
     assert [(level.price, level.quantity) for level in first.bids] == [(100, 1), (99, 1)]
     assert first.checksum == second.checksum
     assert len(replay_snapshots([first, second])) == 1
+
+
+def test_direct_snapshot_construction_uses_same_canonical_levels():
+    snapshot = OrderBookSnapshot(
+        exchange="test",
+        symbol="BTC",
+        timestamp_ms=1000,
+        sequence=1,
+        bids=(BookLevel(99, 1), BookLevel(100, 0.5)),
+        asks=(BookLevel(102, 1), BookLevel(101, 1)),
+    )
+
+    assert [level.price for level in snapshot.bids] == [100, 99]
+    assert [level.price for level in snapshot.asks] == [101, 102]
 
 
 def test_crossed_and_stale_books_are_rejected_without_fills():
