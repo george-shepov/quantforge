@@ -5,6 +5,7 @@ import itertools
 import math
 import random
 import statistics
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
@@ -117,6 +118,7 @@ class BookQuote:
     bid_size: float
     ask_size: float
     timestamp_ns: int
+    source_event_checksum: str = ""
 
 
 @dataclass
@@ -145,6 +147,10 @@ class ArbitrageCandidate:
     estimated_profit: float
     decision: str
     rejection_reasons: tuple[str, ...]
+    buy_timestamp_ns: int
+    sell_timestamp_ns: int
+    buy_source_event_checksum: str
+    sell_source_event_checksum: str
 
     @property
     def explanation(self) -> str:
@@ -165,14 +171,17 @@ class CrossExchangeArbitrageEngine:
         self.books: dict[tuple[str, str], BookQuote] = {}
 
     def update(self, quote: BookQuote) -> list[ArbitrageOpportunity]:
-        self.books[(quote.exchange, quote.symbol)] = quote
-        return self.scan(quote.symbol)
+        return self._accepted_opportunities(self.update_candidates(quote))
 
     def update_candidates(self, quote: BookQuote) -> list[ArbitrageCandidate]:
         self.books[(quote.exchange, quote.symbol)] = quote
-        return self.scan_candidates(quote.symbol)
+        return self.scan_candidates(quote.symbol, updated_exchange=quote.exchange)
 
     def scan(self, symbol: str) -> list[ArbitrageOpportunity]:
+        return self._accepted_opportunities(self.scan_candidates(symbol))
+
+    @staticmethod
+    def _accepted_opportunities(candidates: Iterable[ArbitrageCandidate]) -> list[ArbitrageOpportunity]:
         opportunities = [
             ArbitrageOpportunity(
                 symbol=item.symbol,
@@ -184,16 +193,18 @@ class CrossExchangeArbitrageEngine:
                 gross_edge_bps=item.gross_edge_bps,
                 expected_edge_bps=item.expected_edge_bps,
             )
-            for item in self.scan_candidates(symbol)
+            for item in candidates
             if item.decision == "accepted"
         ]
         return sorted(opportunities, key=lambda item: item.expected_edge_bps, reverse=True)
 
-    def scan_candidates(self, symbol: str) -> list[ArbitrageCandidate]:
+    def scan_candidates(self, symbol: str, *, updated_exchange: str | None = None) -> list[ArbitrageCandidate]:
         books = [book for (_, candidate), book in self.books.items() if candidate == symbol]
         candidates: list[ArbitrageCandidate] = []
         for buy, sell in itertools.permutations(books, 2):
             if buy.exchange == sell.exchange or buy.ask <= 0:
+                continue
+            if updated_exchange is not None and updated_exchange not in {buy.exchange, sell.exchange}:
                 continue
             gross = (sell.bid - buy.ask) / buy.ask * 10_000
             fee_cost = 2 * self.fee_bps
@@ -218,6 +229,10 @@ class CrossExchangeArbitrageEngine:
                     estimated_profit=buy.ask * quantity * expected / 10_000,
                     decision="accepted" if accepted else "rejected",
                     rejection_reasons=reasons,
+                    buy_timestamp_ns=buy.timestamp_ns,
+                    sell_timestamp_ns=sell.timestamp_ns,
+                    buy_source_event_checksum=buy.source_event_checksum,
+                    sell_source_event_checksum=sell.source_event_checksum,
                 )
             )
         return sorted(candidates, key=lambda item: item.expected_edge_bps, reverse=True)
@@ -239,6 +254,7 @@ def book_quote_from_event(event: MarketEvent) -> BookQuote | None:
             bid_size=float(bid["sz"]),
             ask_size=float(ask["sz"]),
             timestamp_ns=event.event_time_ns,
+            source_event_checksum=event.checksum,
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -254,7 +270,7 @@ def scan_arbitrage_events(
     limit: int = 500,
 ) -> dict[str, Any]:
     engine = CrossExchangeArbitrageEngine(min_edge_bps, fee_bps, max_quantity)
-    rows: list[dict[str, Any]] = []
+    rows: deque[dict[str, Any]] = deque(maxlen=max(limit, 1))
     event_count = 0
     for event in sorted(events, key=event_sort_key):
         event_count += 1
@@ -265,7 +281,10 @@ def scan_arbitrage_events(
             identity = "|".join(
                 (
                     dataset_id,
-                    event.checksum,
+                    candidate.buy_source_event_checksum,
+                    candidate.sell_source_event_checksum,
+                    str(candidate.buy_timestamp_ns),
+                    str(candidate.sell_timestamp_ns),
                     candidate.symbol,
                     candidate.buy_exchange,
                     candidate.sell_exchange,
@@ -277,28 +296,27 @@ def scan_arbitrage_events(
             rows.append(
                 {
                     "opportunity_id": hashlib.sha256(identity.encode()).hexdigest()[:20],
-                    "timestamp_ns": event.event_time_ns,
-                    "source_event_checksum": event.checksum,
+                    "timestamp_ns": max(candidate.buy_timestamp_ns, candidate.sell_timestamp_ns),
                     **asdict(candidate),
                     "rejection_reasons": list(candidate.rejection_reasons),
                     "explanation": candidate.explanation,
                 }
             )
-    rows = rows[-max(limit, 1) :]
-    accepted = sum(row["decision"] == "accepted" for row in rows)
+    retained_rows = list(rows)
+    accepted = sum(row["decision"] == "accepted" for row in retained_rows)
     return {
         "dataset_id": dataset_id,
         "strategy": "cross_exchange_arbitrage",
         "event_count": event_count,
-        "candidate_count": len(rows),
+        "candidate_count": len(retained_rows),
         "accepted_count": accepted,
-        "rejected_count": len(rows) - accepted,
+        "rejected_count": len(retained_rows) - accepted,
         "parameters": {
             "min_edge_bps": min_edge_bps,
             "fee_bps": fee_bps,
             "max_quantity": max_quantity,
         },
-        "opportunities": rows,
+        "opportunities": retained_rows,
         "safety": {
             "environment": "simulation",
             "order_submission": False,

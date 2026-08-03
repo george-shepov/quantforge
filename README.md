@@ -78,10 +78,10 @@ opportunity tape with responsive mobile cards. Build, Guided, Expert, and Watch 
 share the exact same response data: Build exposes assumptions, Guided teaches the decision,
 Expert preserves compact raw evidence, and Watch & Learn advances through replay candidates as
 a lesson. Accepted and rejected filters never remove the explanation attached to a candidate.
-From any selected row, **Replay opportunity** reruns the source dataset with the exact scanner
+From any selected row, **Replay dataset** reruns the full source dataset with the exact scanner
 parameters, while **Add to experiment** queues those parameters in the existing walk-forward and
-Monte Carlo research pipeline. These handoffs preserve the opportunity ID and evidence in local
-history and do not introduce an execution endpoint.
+Monte Carlo research pipeline. Both handoffs preserve the selected opportunity ID and its two
+source quotes as context in local history; they do not introduce an execution endpoint.
 
 ### Experiment system
 
@@ -203,10 +203,10 @@ The original MVP remains available at `POST /api/backtests/run` with:
 - Stress scenarios and performance metrics
 
 WhiteBIT candlesticks use its documented V1 Kline route while its other public REST APIs remain
-on V4. Bybit documents HTTP 403 responses for API requests from restricted regions, including US
-IP addresses; QuantForge reports that restriction explicitly and uses deterministic synthetic
-fallback when enabled. Live Bybit research should run only from a region permitted by Bybit's
-current terms.
+on V4. Bybit documents restricted regions, including US IP addresses, as one cause of HTTP 403;
+it also lists IP rate limiting and malformed GET requests. QuantForge reports those possibilities
+and uses deterministic synthetic fallback when enabled. Live Bybit research should run only from
+a region permitted by Bybit's current terms.
 
 ## Development
 
