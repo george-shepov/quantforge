@@ -245,13 +245,12 @@ class EventDatasetCatalog:
         return manifest
 
     def get(self, dataset_id: str) -> DatasetManifest:
-        path = self._manifest_path(dataset_id).resolve()
-        root = self.root.resolve()
-        if path.parent.parent != root or path.name != "manifest.json":
-            raise ValueError("Invalid dataset path")
-        if not path.exists():
-            raise FileNotFoundError(dataset_id)
-        return self._derive_manifest_fields(DatasetManifest.model_validate_json(path.read_text()))
+        if not isinstance(dataset_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", dataset_id):
+            raise ValueError("Invalid dataset id")
+        for manifest in self.list():
+            if manifest.dataset_id == dataset_id:
+                return manifest
+        raise FileNotFoundError(dataset_id)
 
     def list(self) -> list[DatasetManifest]:
         manifests: list[DatasetManifest] = []
