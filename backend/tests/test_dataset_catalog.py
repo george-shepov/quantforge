@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.research.events import DatasetManifest, EventDatasetCatalog
+from app.research.events import DatasetManifest, EventDatasetCatalog, EventKind, MarketEvent
 
 
 def manifest(dataset_id: str, *, parts: list[str], exchanges: list[str] | None = None) -> DatasetManifest:
@@ -47,3 +47,25 @@ def test_dataset_reader_rejects_manifest_path_traversal(tmp_path):
 
     with pytest.raises(ValueError, match="invalid part path"):
         catalog.read("unsafe-dataset")
+
+
+def test_dataset_reader_does_not_infer_hive_partition_columns(tmp_path):
+    catalog = EventDatasetCatalog(tmp_path)
+    event = MarketEvent.build(
+        sequence=1,
+        exchange="hyperliquid",
+        symbol="BTC",
+        kind=EventKind.BOOK,
+        event_time_ns=1_785_679_807_967_000_000,
+        receive_time_ns=1_785_679_807_968_000_000,
+        payload={
+            "levels": [
+                [{"px": "100", "sz": "1"}],
+                [{"px": "101", "sz": "1"}],
+            ]
+        },
+    )
+
+    catalog.append("partitioned-dataset", [event])
+
+    assert catalog.read("partitioned-dataset") == [event]
