@@ -245,7 +245,10 @@ class EventDatasetCatalog:
         return manifest
 
     def get(self, dataset_id: str) -> DatasetManifest:
-        path = self._manifest_path(dataset_id)
+        path = self._manifest_path(dataset_id).resolve()
+        root = self.root.resolve()
+        if path.parent.parent != root or path.name != "manifest.json":
+            raise ValueError("Invalid dataset path")
         if not path.exists():
             raise FileNotFoundError(dataset_id)
         return self._derive_manifest_fields(DatasetManifest.model_validate_json(path.read_text()))
