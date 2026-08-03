@@ -33,13 +33,11 @@ class BybitAdapter(ExchangeAdapter):
         if request.end_time:
             params["end"] = int(request.end_time.timestamp() * 1000)
 
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(f"{endpoint.rest}/v5/market/kline", params=params)
-                response.raise_for_status()
-                payload = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ExchangeAdapterError(f"Bybit market-data request failed: {exc}") from exc
+        payload = await _get_public_json(
+            f"{endpoint.rest}/v5/market/kline",
+            params,
+            operation="market-data",
+        )
 
         if payload.get("retCode") != 0:
             raise ExchangeAdapterError(f"Bybit rejected market-data request: {payload.get('retMsg', 'unknown error')}")
@@ -67,10 +65,11 @@ class BybitAdapter(ExchangeAdapter):
         environment = configured_environment(self.name)
         endpoint = endpoints_for(self.name, environment)
         params = {"category": "linear", "symbol": _normalize_symbol(symbol), "limit": min(depth, 200)}
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(f"{endpoint.rest}/v5/market/orderbook", params=params)
-            response.raise_for_status()
-            payload = response.json()
+        payload = await _get_public_json(
+            f"{endpoint.rest}/v5/market/orderbook",
+            params,
+            operation="order-book",
+        )
         if payload.get("retCode") != 0:
             raise ExchangeAdapterError(payload.get("retMsg", "Bybit order-book request failed"))
         result = payload["result"]
@@ -83,6 +82,33 @@ class BybitAdapter(ExchangeAdapter):
             "asks": [[float(p), float(q)] for p, q in result.get("a", [])],
             "environment": environment.value,
         }
+
+
+async def _get_public_json(url: str, params: dict[str, str | int], *, operation: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 403:
+            raise ExchangeAdapterError(
+                f"Bybit {operation} request was blocked with HTTP 403. "
+                "Bybit restricts API access from some server regions, including US IP addresses; "
+                "use synthetic fallback here or deploy QuantForge in a Bybit-permitted region."
+            ) from exc
+        raise ExchangeAdapterError(f"Bybit {operation} request failed: {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise ExchangeAdapterError(f"Bybit {operation} request failed: {exc}") from exc
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise ExchangeAdapterError(
+            f"Bybit {operation} returned a non-JSON response; access may be blocked by the server region."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ExchangeAdapterError(f"Unexpected Bybit {operation} response")
+    return payload
 
 
 def _normalize_symbol(symbol: str) -> str:

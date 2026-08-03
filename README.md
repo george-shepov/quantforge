@@ -202,6 +202,12 @@ The original MVP remains available at `POST /api/backtests/run` with:
 - EMA crossover, mean reversion, and breakout strategies
 - Stress scenarios and performance metrics
 
+WhiteBIT candlesticks use its documented V1 Kline route while its other public REST APIs remain
+on V4. Bybit documents HTTP 403 responses for API requests from restricted regions, including US
+IP addresses; QuantForge reports that restriction explicitly and uses deterministic synthetic
+fallback when enabled. Live Bybit research should run only from a region permitted by Bybit's
+current terms.
+
 ## Development
 
 Backend:

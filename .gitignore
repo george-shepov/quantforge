@@ -6,6 +6,7 @@ venv/
 .env
 node_modules/
 dist/
+*.tsbuildinfo
 coverage/
 *.sqlite3
 .DS_Store
