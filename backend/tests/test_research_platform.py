@@ -43,6 +43,30 @@ def test_cross_exchange_arbitrage_detects_net_edge() -> None:
     assert opportunities[0].quantity == 2
 
 
+def test_arbitrage_accounts_for_depth_and_slippage() -> None:
+    engine = CrossExchangeArbitrageEngine(min_edge_bps=0, fee_bps=1, max_quantity=2, slippage_bps=2)
+    engine.update(
+        BookQuote(
+            "a", "BTC", 99, 100, 2, 2, 1,
+            ask_levels=((100, 1), (101, 1)),
+        )
+    )
+    opportunities = engine.update(
+        BookQuote(
+            "b", "BTC", 101, 102, 2, 2, 1,
+            bid_levels=((102, 1), (101, 1)),
+        )
+    )
+
+    assert opportunities
+    opportunity = opportunities[0]
+    assert opportunity.quantity == 2
+    assert opportunity.buy_price == 100.5
+    assert opportunity.sell_price == 101.5
+    assert opportunity.expected_edge_bps < opportunity.gross_edge_bps
+    assert opportunity.slippage_bps == 2
+
+
 def test_inventory_quotes_skew_away_from_long_inventory() -> None:
     model = InventoryMarketMaker(spread_bps=10, inventory_skew_bps=5, max_inventory=10)
     neutral = model.quotes(100, 0)

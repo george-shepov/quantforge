@@ -83,7 +83,7 @@ class WhiteBITAdapter(ExchangeAdapter):
             payload = response.json()
         return {
             "exchange": self.name,
-            "symbol": symbol.upper(),
+            "symbol": _normalize_symbol(symbol, environment.value == "demo"),
             "timestamp_ms": int(datetime.now(timezone.utc).timestamp() * 1000),
             "sequence": int(payload.get("timestamp", 0)) if isinstance(payload, dict) else 0,
             "bids": [[float(p), float(q)] for p, q in payload.get("bids", [])],

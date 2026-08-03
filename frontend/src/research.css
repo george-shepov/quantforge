@@ -75,6 +75,10 @@ textarea:focus { border-color: #718197; }
 .mode-toggle button { border: 0; padding: 7px 9px; color: var(--muted); background: #090f15; font-size: 9px; }
 .mode-toggle button.active { color: #080b0f; background: var(--accent); font-weight: 800; }
 .story-summary { margin: 0 0 14px; padding: 12px; border-left: 3px solid var(--accent); color: #dce5ee; background: rgba(216, 255, 85, .05); font-size: 12px; line-height: 1.7; }
+.story-details { margin-top: 10px; }
+.story-details > summary { padding: 10px; border: 1px solid #202b36; border-radius: 4px; color: #aab6c3; background: #090f15; font-size: 10px; cursor: pointer; }
+.story-details[open] > summary { border-radius: 4px 4px 0 0; }
+.story-details > .evidence-grid, .story-details > .guided-sections { padding-top: 10px; }
 .evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .evidence-card { min-width: 0; border: 1px solid #202b36; border-radius: 4px; padding: 10px; background: #090f15; }
 .evidence-card > span { display: inline-block; margin-bottom: 7px; padding: 3px 5px; border-radius: 3px; color: #080b0f; background: #9aa6b3; font-size: 8px; font-weight: 800; text-transform: uppercase; }

@@ -76,7 +76,7 @@ class BybitAdapter(ExchangeAdapter):
         result = payload["result"]
         return {
             "exchange": self.name,
-            "symbol": symbol.upper(),
+            "symbol": _normalize_symbol(symbol),
             "timestamp_ms": int(result.get("ts", payload.get("time", 0))),
             "sequence": int(result.get("u", 0)),
             "bids": [[float(p), float(q)] for p, q in result.get("b", [])],

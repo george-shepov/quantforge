@@ -2,6 +2,8 @@ import asyncio
 from datetime import datetime, timezone
 
 from app.exchanges.bybit import BybitAdapter, _normalize_symbol as normalize_bybit
+from app.exchanges.bitmex import _normalize_symbol as normalize_bitmex
+from app.exchanges.hyperliquid import _normalize_symbol as normalize_hyperliquid
 from app.exchanges.whitebit import WhiteBITAdapter, _normalize_symbol as normalize_whitebit
 from app.models import ExchangeName, MarketDataRequest
 
@@ -43,6 +45,8 @@ def request(exchange: ExchangeName) -> MarketDataRequest:
 def test_symbol_normalization_handles_common_perpetual_forms():
     assert normalize_bybit("BTC/USDT-PERP") == "BTCUSDT"
     assert normalize_bybit("BTCUSDT") == "BTCUSDT"
+    assert normalize_hyperliquid("BTC/USDT-PERP") == "BTC"
+    assert normalize_bitmex("BTC/USDT-PERP") == "XBTUSD"
     assert normalize_whitebit("BTC/USDT-PERP") == "BTC_USDT"
     assert normalize_whitebit("BTCUSDT", demo=True) == "DBTC_DUSDT"
 

@@ -232,6 +232,9 @@ export interface ExecutionStoryRequest {
   side: 'buy' | 'sell'
   quantity: number
   limit_price: number | null
+  fee_bps: number
+  as_of_timestamp_ms?: number | null
+  max_age_ms?: number | null
   mode: StoryMode
   intent: string
   hypothesis: string
@@ -239,16 +242,24 @@ export interface ExecutionStoryRequest {
   invalidation_conditions: string[]
   hopes: string[]
   risks: string[]
+  post_run_reflection: string
 }
 
 export interface ExecutionStoryResponse {
+  id: string
+  story_id: string
+  run_id: string
+  created_at: string
   execution: {
     requested_quantity: number
     filled_quantity: number
     remaining_quantity: number
     average_price: number | null
+    notional: number
+    fees: number
     status: string
-    fills: Array<{ price: number; quantity: number; notional: number }>
+    snapshot_checksum: string
+    fills: Array<{ price: number; quantity: number; notional: number; fee: number }>
   }
   story: {
     title: string
@@ -258,12 +269,26 @@ export interface ExecutionStoryResponse {
     summary: string
     evidence: Array<{ kind: string; label: string; value: string; explanation?: string | null }>
     detailsCollapsed: boolean
+    export: {
+      title: string
+      intent: string
+      hypothesis: string
+      assumptions: string[]
+      invalidationConditions: string[]
+      hopes: string[]
+      risks: string[]
+      evidence: Array<{ kind: string; label: string; value: string; explanation?: string | null }>
+      validationSteps: Array<{ label: string; instruction: string; expected: string }>
+      reflectionPrompt: string
+      postRunReflection: string
+    }
     assumptions?: string[]
     invalidationConditions?: string[]
     hopes?: string[]
     risks?: string[]
     validationSteps?: Array<{ label: string; instruction: string; expected: string }>
     reflectionPrompt?: string
+    postRunReflection?: string
   }
 }
 

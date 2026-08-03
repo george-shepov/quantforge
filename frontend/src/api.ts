@@ -83,3 +83,11 @@ export function getExperiment(id: string) {
 export function buildExecutionStory(config: ExecutionStoryRequest) {
   return request<ExecutionStoryResponse>('/api/research/execution/story', { method: 'POST', body: JSON.stringify(config) })
 }
+
+export function listExecutionStories(limit = 25) {
+  return request<ExecutionStoryResponse[]>(`/api/research/execution-stories?limit=${limit}`)
+}
+
+export function getExecutionStory(id: string) {
+  return request<ExecutionStoryResponse>(`/api/research/execution-stories/${encodeURIComponent(id)}`)
+}

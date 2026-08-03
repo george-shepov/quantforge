@@ -47,6 +47,7 @@ import type {
   RunConfig,
   SafetyStatus,
   ScenarioName,
+  StoryMode,
   StrategyName,
   WorkspaceName,
 } from './types'
@@ -69,13 +70,14 @@ const defaultStoryRequest: ExecutionStoryRequest = {
     bids: [[100000, 0.4], [99990, 0.8], [99970, 1.2]],
     asks: [[100010, 0.3], [100020, 0.5], [100050, 1.5]],
   },
-  side: 'buy', quantity: 1, limit_price: null, mode: 'guided',
+    side: 'buy', quantity: 1, limit_price: null, fee_bps: 0, mode: 'guided',
   intent: 'Learn how available order-book depth changes the actual fill.',
   hypothesis: 'The order should fill completely with limited book-walking slippage.',
   assumptions: ['The snapshot is fresh', 'Fees and latency are evaluated separately'],
   invalidation_conditions: ['The market moves before the order reaches the venue'],
   hopes: ['The strategy remains viable after realistic execution costs'],
   risks: ['A partial fill can leave residual directional exposure'],
+  post_run_reflection: '',
 }
 
 const tabs: Array<[WorkspaceName, string]> = [
@@ -316,11 +318,16 @@ function ExperimentDetail({ experiment, busy, onRefresh }: { experiment: Experim
 }
 
 function ManualWorkspace({ remember }: { remember: (entry: Omit<HistoryEntry, 'id' | 'createdAt'>) => void }) {
-  const [request, setRequest] = useState(defaultStoryRequest)
+  const [mode, setMode] = useState<StoryMode>(() => loadStoryMode())
+  const [request, setRequest] = useState({ ...defaultStoryRequest, mode })
   const [bookText, setBookText] = useState(JSON.stringify(defaultStoryRequest.snapshot, null, 2))
   const [result, setResult] = useState<ExecutionStoryResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => {
+    localStorage.setItem('quantforge:story-mode:v1', mode)
+    setRequest((current) => ({ ...current, mode }))
+  }, [mode])
   async function explain() {
     setLoading(true); setError('')
     try {
@@ -330,12 +337,12 @@ function ManualWorkspace({ remember }: { remember: (entry: Omit<HistoryEntry, 'i
       remember({ kind: 'story', title: output.story.title, summary: output.story.summary, payload: output })
     } catch (err) { setError(messageOf(err)) } finally { setLoading(false) }
   }
-  return <div className="page-workspace two-column-page"><section className="surface-card sticky-card"><div className="section-heading"><div><span>EXECUTION STORY</span><h2>Expected vs actual</h2></div><div className="mode-toggle"><button className={request.mode === 'expert' ? 'active' : ''} onClick={() => setRequest({ ...request, mode: 'expert' })}>Expert</button><button className={request.mode === 'guided' ? 'active' : ''} onClick={() => setRequest({ ...request, mode: 'guided' })}>Guided</button></div></div><Field label="Order-book snapshot JSON"><textarea rows={14} value={bookText} onChange={(e) => setBookText(e.target.value)} /></Field><div className="field-row"><Field label="Side"><select value={request.side} onChange={(e) => setRequest({ ...request, side: e.target.value as 'buy' | 'sell' })}><option value="buy">Buy</option><option value="sell">Sell</option></select></Field><NumberField label="Quantity" value={request.quantity} step="0.01" onChange={(quantity) => setRequest({ ...request, quantity })} /></div><Field label="Limit price (blank = market)"><input type="number" value={request.limit_price ?? ''} onChange={(e) => setRequest({ ...request, limit_price: e.target.value ? Number(e.target.value) : null })} /></Field><Field label="Intent"><input value={request.intent} onChange={(e) => setRequest({ ...request, intent: e.target.value })} /></Field><Field label="Hypothesis"><textarea rows={3} value={request.hypothesis} onChange={(e) => setRequest({ ...request, hypothesis: e.target.value })} /></Field><button className="run" onClick={() => void explain()} disabled={loading}>{loading ? 'ANALYZING…' : 'GENERATE EXECUTION STORY'}</button>{error && <div className="error">{error}</div>}</section><section className="surface-card">{result ? <StoryView result={result} /> : <Empty title="NO STORY YET">Run the same execution facts through expert or guided presentation.</Empty>}</section></div>
+  return <div className="page-workspace two-column-page"><section className="surface-card sticky-card"><div className="section-heading"><div><span>EXECUTION STORY</span><h2>Expected vs actual</h2></div><div className="mode-toggle"><button className={mode === 'expert' ? 'active' : ''} onClick={() => setMode('expert')}>Expert</button><button className={mode === 'guided' ? 'active' : ''} onClick={() => setMode('guided')}>Guided</button></div></div><Field label="Order-book snapshot JSON"><textarea rows={14} value={bookText} onChange={(e) => setBookText(e.target.value)} /></Field><div className="field-row"><Field label="Side"><select value={request.side} onChange={(e) => setRequest({ ...request, side: e.target.value as 'buy' | 'sell' })}><option value="buy">Buy</option><option value="sell">Sell</option></select></Field><NumberField label="Quantity" value={request.quantity} step="0.01" onChange={(quantity) => setRequest({ ...request, quantity })} /></div><Field label="Limit price (blank = market)"><input type="number" value={request.limit_price ?? ''} onChange={(e) => setRequest({ ...request, limit_price: e.target.value ? Number(e.target.value) : null })} /></Field><Field label="Intent"><input value={request.intent} onChange={(e) => setRequest({ ...request, intent: e.target.value })} /></Field><Field label="Hypothesis"><textarea rows={3} value={request.hypothesis} onChange={(e) => setRequest({ ...request, hypothesis: e.target.value })} /></Field><Field label="Post-run reflection"><textarea rows={3} value={request.post_run_reflection} onChange={(e) => setRequest({ ...request, post_run_reflection: e.target.value })} /></Field><button className="run" onClick={() => void explain()} disabled={loading}>{loading ? 'ANALYZING…' : 'GENERATE EXECUTION STORY'}</button>{error && <div className="error">{error}</div>}</section><section className="surface-card">{result ? <StoryView result={result} /> : <Empty title="NO STORY YET">Run the same execution facts through expert or guided presentation.</Empty>}</section></div>
 }
 
 function StoryView({ result }: { result: ExecutionStoryResponse }) {
   const story = result.story
-  return <><div className="section-heading"><div><span>{story.mode.toUpperCase()} MODE</span><h2>{story.title}</h2></div><strong className={`status-${result.execution.status}`}>{result.execution.status.replaceAll('_', ' ')}</strong></div><p className="story-summary">{story.summary}</p><div className="research-metric-grid"><Metric label="Requested" value={String(result.execution.requested_quantity)} /><Metric label="Filled" value={String(result.execution.filled_quantity)} /><Metric label="Remaining" value={String(result.execution.remaining_quantity)} /><Metric label="Average price" value={result.execution.average_price?.toLocaleString() ?? 'Not filled'} /></div><div className="evidence-grid">{story.evidence.map((item, index) => <article className={`evidence-card evidence-${item.kind}`} key={`${item.kind}-${item.label}-${index}`}><span>{item.kind}</span><b>{item.label}</b><p>{item.value}</p>{item.explanation && <small>{item.explanation}</small>}</article>)}</div>{story.mode === 'guided' && <div className="guided-sections"><GuidedList title="Assumptions" items={story.assumptions} /><GuidedList title="Invalidation conditions" items={story.invalidationConditions} /><GuidedList title="Hopes" items={story.hopes} /><GuidedList title="Risks" items={story.risks} /><section><h3>Validation steps</h3>{story.validationSteps?.map((step) => <article className="validation-step" key={step.label}><b>{step.label}</b><p>{step.instruction}</p><small>Expected: {step.expected}</small></article>)}</section>{story.reflectionPrompt && <blockquote>{story.reflectionPrompt}</blockquote>}</div>}</>
+  return <><div className="section-heading"><div><span>{story.mode.toUpperCase()} MODE · ID {result.story_id.slice(0, 10)}</span><h2>{story.title}</h2></div><strong className={`status-${result.execution.status}`}>{result.execution.status.replaceAll('_', ' ')}</strong></div><p className="story-summary">{story.summary}</p><div className="research-metric-grid"><Metric label="Requested" value={String(result.execution.requested_quantity)} /><Metric label="Filled" value={String(result.execution.filled_quantity)} /><Metric label="Remaining" value={String(result.execution.remaining_quantity)} /><Metric label="Average price" value={result.execution.average_price?.toLocaleString() ?? 'Not filled'} /><Metric label="Notional" value={result.execution.notional.toLocaleString()} /><Metric label="Fees" value={result.execution.fees.toLocaleString()} /></div><details className="story-details" open={!story.detailsCollapsed}><summary>Execution facts and thesis</summary><div className="evidence-grid">{story.evidence.map((item, index) => <article className={`evidence-card evidence-${item.kind}`} key={`${item.kind}-${item.label}-${index}`}><span>{item.kind}</span><b>{item.label}</b><p>{item.value}</p>{item.explanation && <small>{item.explanation}</small>}</article>)}</div>{story.mode === 'guided' && <div className="guided-sections"><GuidedList title="Assumptions" items={story.assumptions} /><GuidedList title="Invalidation conditions" items={story.invalidationConditions} /><GuidedList title="Hopes" items={story.hopes} /><GuidedList title="Risks" items={story.risks} /><section><h3>Validation steps</h3>{story.validationSteps?.map((step) => <article className="validation-step" key={step.label}><b>{step.label}</b><p>{step.instruction}</p><small>Expected: {step.expected}</small></article>)}</section>{story.reflectionPrompt && <blockquote>{story.reflectionPrompt}</blockquote>}{story.postRunReflection && <section><h3>Post-run reflection</h3><p>{story.postRunReflection}</p></section>}</div>}</details></>
 }
 
 function GuidedList({ title, items }: { title: string; items?: string[] }) { return <section><h3>{title}</h3><ul>{items?.map((item) => <li key={item}>{item}</li>)}</ul></section> }
@@ -360,3 +367,4 @@ function messageOf(error: unknown) { return error instanceof Error ? error.messa
 function money(value: number) { return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }) }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? value : date.toLocaleString() }
 function loadHistory(): HistoryEntry[] { try { const value = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
+function loadStoryMode(): StoryMode { const value = localStorage.getItem('quantforge:story-mode:v1'); return value === 'expert' || value === 'guided' ? value : 'guided' }

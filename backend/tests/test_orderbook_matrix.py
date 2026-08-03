@@ -75,3 +75,38 @@ def test_replay_stable_tie_breaker_uses_exchange_and_symbol():
         ("a", "ETH"),
         ("z", "ETH"),
     ]
+
+
+def test_snapshot_levels_are_sorted_deduplicated_and_checksum_stable():
+    first = book(asks=[[101, 0.25], [100, 0.5], [100, 0.25]], bids=[[99, 1], [100, 1]])
+    second = book(asks=[[100, 0.75], [101, 0.25]], bids=[[100, 1], [99, 1]])
+
+    assert [(level.price, level.quantity) for level in first.asks] == [(100, 0.75), (101, 0.25)]
+    assert [(level.price, level.quantity) for level in first.bids] == [(100, 1), (99, 1)]
+    assert first.checksum == second.checksum
+    assert len(replay_snapshots([first, second])) == 1
+
+
+def test_crossed_and_stale_books_are_rejected_without_fills():
+    crossed = book(asks=[[100, 1]], bids=[[100, 1]])
+    stale = book(asks=[[100, 1]], timestamp_ms=1)
+
+    assert simulate_order(crossed, Side.BUY, 1).status == OrderStatus.REJECTED
+    assert simulate_order(stale, Side.BUY, 1, now_ms=1001, max_age_ms=100).status == OrderStatus.REJECTED
+
+
+def test_malformed_levels_fail_closed():
+    with pytest.raises(ValueError):
+        book(asks=[["not-a-price", 1]])
+    with pytest.raises(ValueError):
+        book(asks=[[100, -1]])
+
+
+def test_fees_and_notional_are_symmetric_for_buy_and_sell():
+    buy = simulate_order(book(asks=[[100, 0.5], [101, 0.5]]), Side.BUY, 1, fee_bps=10)
+    sell = simulate_order(book(bids=[[101, 0.5], [100, 0.5]]), Side.SELL, 1, fee_bps=10)
+
+    assert buy.notional == pytest.approx(100.5)
+    assert sell.notional == pytest.approx(100.5)
+    assert buy.fees == pytest.approx(0.1005)
+    assert sell.fees == pytest.approx(0.1005)

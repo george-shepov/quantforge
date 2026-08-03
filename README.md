@@ -153,6 +153,16 @@ curl -X POST http://localhost:8008/api/research/execution/testnet-order \
 
 Actual testnet submission additionally requires the environment gates and safety header. Keep the gate disabled in normal research deployments.
 
+## Execution stories
+
+`POST /api/research/execution/story` records immutable execution facts together with a structured thesis and returns a referenceable `story_id`. Retrieve an export with:
+
+```bash
+curl http://localhost:8008/api/research/execution-stories/<story-id>
+```
+
+The export keeps facts, assumptions, hypotheses, risks, validation steps, and post-run reflection together. Expert and guided modes only change presentation; they never change execution calculations.
+
 ## Existing candle backtester
 
 The original MVP remains available at `POST /api/backtests/run` with:

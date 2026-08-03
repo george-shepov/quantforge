@@ -7,5 +7,6 @@ venv/
 node_modules/
 dist/
 coverage/
+data/
 *.sqlite3
 .DS_Store

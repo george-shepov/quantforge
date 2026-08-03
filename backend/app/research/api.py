@@ -4,6 +4,7 @@ import os
 from dataclasses import asdict
 from functools import lru_cache
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -11,13 +12,14 @@ from pydantic import BaseModel, Field
 from .engine import DeterministicReplayEngine, make_strategy
 from .events import EventDatasetCatalog, RecorderConfig, RecorderManager
 from .execution import HyperliquidTestnetAdapter, TestnetOrderRequest, TestnetSafetyGate
-from .execution_story import StoryMode, build_execution_story
+from .execution_story import ExecutionRunStore, StoryMode, build_execution_story
 from .orderbook import OrderBookSnapshot, Side, simulate_order
 from .persistence import ExperimentConfig, ExperimentStore, enqueue_experiment
 
 router = APIRouter(prefix="/api/research", tags=["event research"])
 catalog = EventDatasetCatalog(os.getenv("QUANTFORGE_DATA_ROOT", "./data/quantforge"))
 recorders = RecorderManager(catalog)
+execution_runs = ExecutionRunStore(catalog.root)
 
 
 @lru_cache(maxsize=1)
@@ -37,7 +39,10 @@ class ExecutionStoryRequest(BaseModel):
     snapshot: dict[str, Any]
     side: str = "buy"
     quantity: float = Field(gt=0)
-    limit_price: float | None = None
+    limit_price: float | None = Field(default=None, gt=0)
+    fee_bps: float = Field(default=0.0, ge=0)
+    as_of_timestamp_ms: int | None = Field(default=None, ge=0)
+    max_age_ms: int | None = Field(default=None, ge=0)
     mode: StoryMode = StoryMode.GUIDED
     intent: str = "Understand how the recorded order book would execute this order."
     hypothesis: str = "The order should execute near the best displayed price."
@@ -45,6 +50,7 @@ class ExecutionStoryRequest(BaseModel):
     invalidation_conditions: list[str] = Field(default_factory=list)
     hopes: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
+    post_run_reflection: str = ""
 
 
 @router.get("/capabilities")
@@ -152,7 +158,15 @@ def execution_story(request: ExecutionStoryRequest) -> dict[str, Any]:
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid execution story request: {exc}") from exc
 
-    result = simulate_order(snapshot, side, request.quantity, request.limit_price)
+    result = simulate_order(
+        snapshot,
+        side,
+        request.quantity,
+        request.limit_price,
+        request.fee_bps,
+        now_ms=request.as_of_timestamp_ms,
+        max_age_ms=request.max_age_ms,
+    )
     story = build_execution_story(
         snapshot,
         side,
@@ -163,18 +177,68 @@ def execution_story(request: ExecutionStoryRequest) -> dict[str, Any]:
         invalidation_conditions=request.invalidation_conditions,
         hopes=request.hopes,
         risks=request.risks,
+        post_run_reflection=request.post_run_reflection,
     )
-    return {
-        "execution": {
-            "requested_quantity": result.requested_quantity,
-            "filled_quantity": result.filled_quantity,
-            "remaining_quantity": result.remaining_quantity,
-            "average_price": result.average_price,
-            "status": result.status.value,
-            "fills": [asdict(fill) for fill in result.fills],
-        },
-        "story": story.render(request.mode),
+    execution = {
+        "requested_quantity": result.requested_quantity,
+        "filled_quantity": result.filled_quantity,
+        "remaining_quantity": result.remaining_quantity,
+        "average_price": result.average_price,
+        "notional": result.notional,
+        "fees": result.fees,
+        "status": result.status.value,
+        "fills": [asdict(fill) for fill in result.fills],
+        "snapshot_checksum": snapshot.checksum,
     }
+    run_id = uuid4().hex
+    rendered_story = story.render(request.mode)
+    record = {
+        "id": run_id,
+        "story_id": run_id,
+        "run_id": run_id,
+        "snapshot": {
+            "exchange": snapshot.exchange,
+            "symbol": snapshot.symbol,
+            "timestamp_ms": snapshot.timestamp_ms,
+            "sequence": snapshot.sequence,
+            "bids": [[level.price, level.quantity] for level in snapshot.bids],
+            "asks": [[level.price, level.quantity] for level in snapshot.asks],
+            "environment": snapshot.environment,
+        },
+        "execution": execution,
+        "story": rendered_story,
+        "story_export": story.export(),
+    }
+    stored = execution_runs.save(run_id, record)
+    return {
+        "id": run_id,
+        "story_id": run_id,
+        "run_id": run_id,
+        "created_at": stored["created_at"],
+        "execution": execution,
+        "story": rendered_story,
+    }
+
+
+@router.get("/execution/runs/{run_id}")
+def execution_run(run_id: str) -> dict[str, Any]:
+    try:
+        return execution_runs.get(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Execution run not found") from exc
+
+
+@router.get("/execution-stories")
+def execution_stories(limit: int = Query(default=25, ge=1, le=100)) -> list[dict[str, Any]]:
+    return execution_runs.list(limit)
+
+
+@router.get("/execution-stories/{story_id}")
+def execution_story_by_id(story_id: str) -> dict[str, Any]:
+    try:
+        return execution_runs.get(story_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Execution story not found") from exc
 
 
 @router.post("/execution/testnet-order")

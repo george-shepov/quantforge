@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 
 import httpx
 
@@ -35,14 +36,17 @@ class BitMEXAdapter(ExchangeAdapter):
         except (httpx.HTTPError, ValueError) as exc:
             raise ExchangeAdapterError(f"BitMEX market-data request failed: {exc}") from exc
 
-        candles = [
-            Candle(
-                timestamp=datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00")),
-                open=float(row["open"]), high=float(row["high"]), low=float(row["low"]),
-                close=float(row["close"]), volume=float(row.get("volume") or 0.0),
-            )
-            for row in data if row.get("open") is not None
-        ]
+        try:
+            candles = [
+                Candle(
+                    timestamp=datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00")),
+                    open=float(row["open"]), high=float(row["high"]), low=float(row["low"]),
+                    close=float(row["close"]), volume=float(row.get("volume") or 0.0),
+                )
+                for row in data if row.get("open") is not None
+            ]
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ExchangeAdapterError("Unexpected BitMEX candle response") from exc
         if aggregate_factor > 1:
             candles = _aggregate(candles, aggregate_factor)
         candles = candles[-request.limit :]
@@ -74,10 +78,17 @@ def _aggregate(candles: list[Candle], factor: int) -> list[Candle]:
 
 
 def _normalize_symbol(symbol: str) -> str:
-    value = symbol.upper().replace("-PERP", "")
-    if value in {"BTC", "XBT"}:
+    parts = [
+        part
+        for part in re.split(r"[/_:\-]", symbol.upper())
+        if part and part not in {"PERP", "PERPETUAL"}
+    ]
+    if not parts:
+        raise ExchangeAdapterError("BitMEX symbol is empty")
+    value = parts[0]
+    if value in {"BTC", "XBT", "BTCUSD", "BTCUSDT", "BTCUSDC"}:
         return "XBTUSD"
-    if value == "ETH":
+    if value in {"ETH", "ETHUSD", "ETHUSDT", "ETHUSDC"}:
         return "ETHUSD"
     return value
 

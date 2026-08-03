@@ -116,6 +116,8 @@ class BookQuote:
     bid_size: float
     ask_size: float
     timestamp_ns: int
+    bid_levels: tuple[tuple[float, float], ...] = ()
+    ask_levels: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass
@@ -128,13 +130,22 @@ class ArbitrageOpportunity:
     quantity: float
     gross_edge_bps: float
     expected_edge_bps: float
+    slippage_bps: float = 0.0
+    residual_quantity: float = 0.0
 
 
 class CrossExchangeArbitrageEngine:
-    def __init__(self, min_edge_bps: float = 5.0, fee_bps: float = 2.0, max_quantity: float = 1.0) -> None:
+    def __init__(
+        self,
+        min_edge_bps: float = 5.0,
+        fee_bps: float = 2.0,
+        max_quantity: float = 1.0,
+        slippage_bps: float = 0.0,
+    ) -> None:
         self.min_edge_bps = min_edge_bps
         self.fee_bps = fee_bps
         self.max_quantity = max_quantity
+        self.slippage_bps = max(slippage_bps, 0.0)
         self.books: dict[tuple[str, str], BookQuote] = {}
 
     def update(self, quote: BookQuote) -> list[ArbitrageOpportunity]:
@@ -145,24 +156,52 @@ class CrossExchangeArbitrageEngine:
         books = [book for (_, candidate), book in self.books.items() if candidate == symbol]
         opportunities: list[ArbitrageOpportunity] = []
         for buy, sell in itertools.permutations(books, 2):
-            if buy.exchange == sell.exchange or buy.ask <= 0:
+            if (
+                buy.exchange == sell.exchange
+                or buy.ask <= 0
+                or sell.bid <= 0
+                or buy.ask > sell.bid
+                or min(buy.ask_size, sell.bid_size, self.max_quantity) <= 0
+            ):
                 continue
-            gross = (sell.bid - buy.ask) / buy.ask * 10_000
-            expected = gross - 2 * self.fee_bps
+            quantity = min(buy.ask_size, sell.bid_size, self.max_quantity)
+            buy_price = _volume_weighted_price(
+                buy.ask_levels or ((buy.ask, buy.ask_size),), quantity
+            )
+            sell_price = _volume_weighted_price(
+                sell.bid_levels or ((sell.bid, sell.bid_size),), quantity
+            )
+            gross = (sell_price - buy_price) / buy_price * 10_000
+            expected = gross - 2 * self.fee_bps - 2 * self.slippage_bps
             if expected >= self.min_edge_bps:
                 opportunities.append(
                     ArbitrageOpportunity(
                         symbol=symbol,
                         buy_exchange=buy.exchange,
                         sell_exchange=sell.exchange,
-                        buy_price=buy.ask,
-                        sell_price=sell.bid,
-                        quantity=min(buy.ask_size, sell.bid_size, self.max_quantity),
+                        buy_price=buy_price,
+                        sell_price=sell_price,
+                        quantity=quantity,
                         gross_edge_bps=gross,
                         expected_edge_bps=expected,
+                        slippage_bps=self.slippage_bps,
                     )
                 )
         return sorted(opportunities, key=lambda item: item.expected_edge_bps, reverse=True)
+
+
+def _volume_weighted_price(levels: tuple[tuple[float, float], ...], quantity: float) -> float:
+    remaining = quantity
+    notional = 0.0
+    for price, size in levels:
+        if price <= 0 or size <= 0:
+            continue
+        filled = min(remaining, size)
+        notional += filled * price
+        remaining -= filled
+        if remaining <= 1e-12:
+            break
+    return notional / quantity if remaining <= 1e-12 else float("inf")
 
 
 @dataclass
@@ -270,6 +309,7 @@ class CrossVenueArbitrageStrategy(Strategy):
             min_edge_bps=float(parameters.get("min_edge_bps", 5.0)),
             fee_bps=float(parameters.get("fee_bps", 2.0)),
             max_quantity=float(parameters.get("max_quantity", 1.0)),
+            slippage_bps=float(parameters.get("slippage_bps", 0.0)),
         )
 
     def on_book(self, context: StrategyContext) -> None:
@@ -463,6 +503,12 @@ class DeterministicReplayEngine:
                     bid_size=float(bid["sz"]),
                     ask_size=float(ask["sz"]),
                     timestamp_ns=event.event_time_ns,
+                    bid_levels=tuple(
+                        (float(level["px"]), float(level["sz"])) for level in levels[0]
+                    ),
+                    ask_levels=tuple(
+                        (float(level["px"]), float(level["sz"])) for level in levels[1]
+                    ),
                 )
                 books[(event.exchange, event.symbol)] = quote
                 portfolio.mark(event.exchange, event.symbol, (quote.bid + quote.ask) / 2)
