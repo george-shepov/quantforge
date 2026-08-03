@@ -89,7 +89,7 @@ textarea:focus { border-color: #718197; }
 .arbitrage-metrics article span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 8px; text-transform: uppercase; }
 .arbitrage-metrics article strong { display: block; overflow: hidden; color: #e2e8ef; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .arbitrage-list { display: grid; gap: 5px; max-height: 500px; overflow: auto; }
-.arbitrage-row { display: grid; grid-template-columns: minmax(100px, 1.4fr) repeat(4, minmax(72px, 1fr)) auto; gap: 10px; align-items: center; width: 100%; min-width: 780px; border: 1px solid #202b36; border-radius: 4px; padding: 10px; color: #dce5ee; background: #090f15; text-align: left; }
+.arbitrage-row { display: grid; grid-template-columns: minmax(72px, .8fr) repeat(6, minmax(72px, 1fr)) auto; gap: 10px; align-items: center; width: 100%; min-width: 900px; border: 1px solid #202b36; border-radius: 4px; padding: 10px; color: #dce5ee; background: #090f15; text-align: left; }
 .arbitrage-row:hover, .arbitrage-row.selected { border-color: var(--accent); }
 .arbitrage-row b, .arbitrage-row small { display: block; }
 .arbitrage-row b { margin-top: 4px; color: #dce5ee; font-size: 10px; }
