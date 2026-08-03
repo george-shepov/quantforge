@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -160,8 +161,9 @@ class EventDatasetCatalog:
         return f"hl-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:10]}"
 
     def _dataset_dir(self, dataset_id: str) -> Path:
-        safe = dataset_id.replace("/", "_").replace("..", "_")
-        return self.root / safe
+        if not isinstance(dataset_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", dataset_id):
+            raise ValueError("Invalid dataset id")
+        return self.root / dataset_id
 
     def _manifest_path(self, dataset_id: str) -> Path:
         return self._dataset_dir(dataset_id) / "manifest.json"
