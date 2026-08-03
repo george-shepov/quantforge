@@ -32,6 +32,8 @@ import { MetricGrid } from "./components/MetricGrid";
 import { PerformanceChart } from "./components/PerformanceChart";
 import { TradesTable } from "./components/TradesTable";
 import { ArbitrageWorkspace } from "./components/ArbitrageWorkspace";
+import { EuMinerPage } from "./EuMinerPage";
+import { shouldShowEuMiner } from "./eu-miner-route";
 import type {
   BacktestResponse,
   CatalogResponse,
@@ -150,6 +152,14 @@ const tabs: Array<[WorkspaceName, string]> = [
 ];
 
 export default function App() {
+  if (shouldShowEuMiner(window.location.pathname, window.location.hostname)) {
+    return <EuMinerPage />;
+  }
+
+  return <ResearchApp />;
+}
+
+function ResearchApp() {
   const [workspace, setWorkspace] = useState<WorkspaceName>("backtest");
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [capabilities, setCapabilities] = useState<ResearchCapabilities | null>(
