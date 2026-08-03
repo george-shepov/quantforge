@@ -14,10 +14,13 @@ from .execution import HyperliquidTestnetAdapter, TestnetOrderRequest, TestnetSa
 from .execution_story import StoryMode, build_execution_story
 from .orderbook import OrderBookSnapshot, Side, simulate_order
 from .persistence import ExperimentConfig, ExperimentStore, enqueue_experiment
+from app.course import CourseRunRequest, CourseScenarioRunner, course_fixture_manifest
 
 router = APIRouter(prefix="/api/research", tags=["event research"])
+course_router = APIRouter(prefix="/api/course", tags=["executable course"])
 catalog = EventDatasetCatalog(os.getenv("QUANTFORGE_DATA_ROOT", "./data/quantforge"))
 recorders = RecorderManager(catalog)
+course_runner = CourseScenarioRunner()
 
 
 @lru_cache(maxsize=1)
@@ -58,6 +61,11 @@ def capabilities() -> dict[str, Any]:
         "microstructure": ["inventory_skew", "queue_position"],
         "persistence": ["postgresql", "redis_rq_worker"],
         "execution": TestnetSafetyGate().status(),
+        "course": {
+            "scenario_id": course_runner.manifest.module_id,
+            "schema_version": course_runner.manifest.schema_version,
+            "fixture_dataset_id": course_fixture_manifest()["dataset_id"],
+        },
     }
 
 
@@ -188,3 +196,24 @@ def testnet_order(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Testnet adapter failed: {exc}") from exc
+
+
+@course_router.get("/manifest")
+def course_manifest() -> dict[str, Any]:
+    return course_runner.manifest.model_dump(mode="json")
+
+
+@course_router.get("/fixtures/{dataset_id}")
+def course_fixture(dataset_id: str) -> dict[str, Any]:
+    fixture = course_fixture_manifest()
+    if dataset_id != fixture["dataset_id"]:
+        raise HTTPException(status_code=404, detail="Course fixture not found")
+    return fixture
+
+
+@course_router.post("/run")
+def run_course(request: CourseRunRequest | None = None) -> dict[str, Any]:
+    try:
+        return course_runner.run(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -267,6 +267,24 @@ export interface ExecutionStoryResponse {
   }
 }
 
+export interface CourseRunResponse {
+  scenario_id: string
+  schema_version: string
+  title: string
+  question: string
+  hypothesis: string
+  verdict: string
+  labs: Array<{
+    scenario_id: string
+    delta_classification: string
+    actual_outcome: Record<string, unknown>
+    delta: Array<Record<string, unknown>>
+  }>
+  provenance: Record<string, unknown>
+  exports: Record<string, string>
+  research_report: string
+}
+
 export interface HistoryEntry {
   id: string
   kind: 'backtest' | 'replay' | 'experiment' | 'story'

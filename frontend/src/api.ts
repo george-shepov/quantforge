@@ -1,6 +1,7 @@
 import type {
   BacktestResponse,
   CatalogResponse,
+  CourseRunResponse,
   DatasetManifest,
   ExecutionStoryRequest,
   ExecutionStoryResponse,
@@ -82,4 +83,8 @@ export function getExperiment(id: string) {
 
 export function buildExecutionStory(config: ExecutionStoryRequest) {
   return request<ExecutionStoryResponse>('/api/research/execution/story', { method: 'POST', body: JSON.stringify(config) })
+}
+
+export function runCourse(seed = 7) {
+  return request<CourseRunResponse>('/api/course/run', { method: 'POST', body: JSON.stringify({ seed }) })
 }

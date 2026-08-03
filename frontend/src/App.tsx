@@ -23,6 +23,7 @@ import {
   queueExperiment,
   replayDataset,
   runBacktest,
+  runCourse,
   startRecording,
   stopRecording,
 } from './api'
@@ -32,6 +33,7 @@ import { TradesTable } from './components/TradesTable'
 import type {
   BacktestResponse,
   CatalogResponse,
+  CourseRunResponse,
   DatasetManifest,
   EventStrategyName,
   ExecutionStoryRequest,
@@ -321,6 +323,8 @@ function ManualWorkspace({ remember }: { remember: (entry: Omit<HistoryEntry, 'i
   const [result, setResult] = useState<ExecutionStoryResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [courseResult, setCourseResult] = useState<CourseRunResponse | null>(null)
+  const [courseLoading, setCourseLoading] = useState(false)
   async function explain() {
     setLoading(true); setError('')
     try {
@@ -330,7 +334,19 @@ function ManualWorkspace({ remember }: { remember: (entry: Omit<HistoryEntry, 'i
       remember({ kind: 'story', title: output.story.title, summary: output.story.summary, payload: output })
     } catch (err) { setError(messageOf(err)) } finally { setLoading(false) }
   }
-  return <div className="page-workspace two-column-page"><section className="surface-card sticky-card"><div className="section-heading"><div><span>EXECUTION STORY</span><h2>Expected vs actual</h2></div><div className="mode-toggle"><button className={request.mode === 'expert' ? 'active' : ''} onClick={() => setRequest({ ...request, mode: 'expert' })}>Expert</button><button className={request.mode === 'guided' ? 'active' : ''} onClick={() => setRequest({ ...request, mode: 'guided' })}>Guided</button></div></div><Field label="Order-book snapshot JSON"><textarea rows={14} value={bookText} onChange={(e) => setBookText(e.target.value)} /></Field><div className="field-row"><Field label="Side"><select value={request.side} onChange={(e) => setRequest({ ...request, side: e.target.value as 'buy' | 'sell' })}><option value="buy">Buy</option><option value="sell">Sell</option></select></Field><NumberField label="Quantity" value={request.quantity} step="0.01" onChange={(quantity) => setRequest({ ...request, quantity })} /></div><Field label="Limit price (blank = market)"><input type="number" value={request.limit_price ?? ''} onChange={(e) => setRequest({ ...request, limit_price: e.target.value ? Number(e.target.value) : null })} /></Field><Field label="Intent"><input value={request.intent} onChange={(e) => setRequest({ ...request, intent: e.target.value })} /></Field><Field label="Hypothesis"><textarea rows={3} value={request.hypothesis} onChange={(e) => setRequest({ ...request, hypothesis: e.target.value })} /></Field><button className="run" onClick={() => void explain()} disabled={loading}>{loading ? 'ANALYZING…' : 'GENERATE EXECUTION STORY'}</button>{error && <div className="error">{error}</div>}</section><section className="surface-card">{result ? <StoryView result={result} /> : <Empty title="NO STORY YET">Run the same execution facts through expert or guided presentation.</Empty>}</section></div>
+  async function executeCourse() {
+    setCourseLoading(true); setError('')
+    try {
+      const output = await runCourse()
+      setCourseResult(output)
+      remember({ kind: 'experiment', title: output.title, summary: `${output.labs.length} executable labs · ${output.verdict}`, payload: output })
+    } catch (err) { setError(messageOf(err)) } finally { setCourseLoading(false) }
+  }
+  return <div className="page-workspace two-column-page"><section className="surface-card sticky-card"><div className="section-heading"><div><span>EXECUTABLE COURSE MODULE</span><h2>Can This Strategy Survive Reality?</h2></div><strong>82 MIN</strong></div><p className="safety">The manual is generated from the versioned scenario, deterministic fixture, and measured evidence—not handwritten result values.</p><button className="run" onClick={() => void executeCourse()} disabled={courseLoading}>{courseLoading ? 'RUNNING MODULE…' : 'RUN STARTER MODULE'}</button>{courseResult && <CourseResultView result={courseResult} />}<div className="section-heading"><div><span>EXECUTION STORY</span><h2>Expected vs actual</h2></div><div className="mode-toggle"><button className={request.mode === 'expert' ? 'active' : ''} onClick={() => setRequest({ ...request, mode: 'expert' })}>Expert</button><button className={request.mode === 'guided' ? 'active' : ''} onClick={() => setRequest({ ...request, mode: 'guided' })}>Guided</button></div></div><Field label="Order-book snapshot JSON"><textarea rows={14} value={bookText} onChange={(e) => setBookText(e.target.value)} /></Field><div className="field-row"><Field label="Side"><select value={request.side} onChange={(e) => setRequest({ ...request, side: e.target.value as 'buy' | 'sell' })}><option value="buy">Buy</option><option value="sell">Sell</option></select></Field><NumberField label="Quantity" value={request.quantity} step="0.01" onChange={(quantity) => setRequest({ ...request, quantity })} /></div><Field label="Limit price (blank = market)"><input type="number" value={request.limit_price ?? ''} onChange={(e) => setRequest({ ...request, limit_price: e.target.value ? Number(e.target.value) : null })} /></Field><Field label="Intent"><input value={request.intent} onChange={(e) => setRequest({ ...request, intent: e.target.value })} /></Field><Field label="Hypothesis"><textarea rows={3} value={request.hypothesis} onChange={(e) => setRequest({ ...request, hypothesis: e.target.value })} /></Field><button className="run" onClick={() => void explain()} disabled={loading}>{loading ? 'ANALYZING…' : 'GENERATE EXECUTION STORY'}</button>{error && <div className="error">{error}</div>}</section><section className="surface-card">{result ? <StoryView result={result} /> : <Empty title="NO STORY YET">Run the same execution facts through expert or guided presentation.</Empty>}</section></div>
+}
+
+function CourseResultView({ result }: { result: CourseRunResponse }) {
+  return <details className="json-details" open><summary>{result.verdict.replaceAll('_', ' ').toUpperCase()} · {result.schema_version} · {String(result.provenance.dataset_id)}</summary><p className="story-summary">{result.question}</p><div className="mini-metrics">{result.labs.map((lab) => <span key={lab.scenario_id}><small>{lab.scenario_id}</small>{lab.delta_classification.replaceAll('_', ' ')}</span>)}</div><details><summary>Generated research report and platform exports</summary><pre>{result.research_report}</pre></details></details>
 }
 
 function StoryView({ result }: { result: ExecutionStoryResponse }) {
