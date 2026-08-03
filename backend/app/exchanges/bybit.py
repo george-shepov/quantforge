@@ -93,8 +93,9 @@ async def _get_public_json(url: str, params: dict[str, str | int], *, operation:
         if exc.response.status_code == 403:
             raise ExchangeAdapterError(
                 f"Bybit {operation} request was blocked with HTTP 403. "
-                "Bybit restricts API access from some server regions, including US IP addresses; "
-                "use synthetic fallback here or deploy QuantForge in a Bybit-permitted region."
+                "Bybit documents possible causes including restricted regions (such as US IP addresses), "
+                "IP rate limiting, or a malformed GET request. Use synthetic fallback here and verify "
+                "the server region plus request and rate-limit telemetry."
             ) from exc
         raise ExchangeAdapterError(f"Bybit {operation} request failed: {exc}") from exc
     except httpx.HTTPError as exc:
@@ -104,7 +105,7 @@ async def _get_public_json(url: str, params: dict[str, str | int], *, operation:
         payload = response.json()
     except ValueError as exc:
         raise ExchangeAdapterError(
-            f"Bybit {operation} returned a non-JSON response; access may be blocked by the server region."
+            f"Bybit {operation} returned a non-JSON response; inspect the response path and server region."
         ) from exc
     if not isinstance(payload, dict):
         raise ExchangeAdapterError(f"Unexpected Bybit {operation} response")

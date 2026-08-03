@@ -7,6 +7,7 @@ from app import main as main_api
 from app.exchanges.base import ExchangeAdapterError
 from app.main import app
 from app.research import api as research_api
+from app.research import persistence as research_persistence
 from app.research.events import EventKind, MarketEvent
 from app.research.persistence import ExperimentConfig, ExperimentStore
 
@@ -29,7 +30,7 @@ def test_blocked_live_exchange_falls_back_with_an_explicit_warning(monkeypatch):
 
         async def fetch_candles(self, request):
             raise ExchangeAdapterError(
-                "Bybit market-data request was blocked with HTTP 403; use a Bybit-permitted region."
+                "Bybit market-data request was blocked with HTTP 403; verify region and rate-limit telemetry."
             )
 
     monkeypatch.setenv("QUANTFORGE_ALLOW_NETWORK", "true")
@@ -43,7 +44,7 @@ def test_blocked_live_exchange_falls_back_with_an_explicit_warning(monkeypatch):
     payload = response.json()
     assert payload["source"] == "synthetic-fallback"
     assert payload["warnings"][0] == (
-        "Bybit market-data request was blocked with HTTP 403; use a Bybit-permitted region."
+        "Bybit market-data request was blocked with HTTP 403; verify region and rate-limit telemetry."
     )
     assert "deterministic synthetic candles" in payload["warnings"][1]
 
@@ -132,6 +133,10 @@ def test_arbitrage_scan_returns_accepted_and_rejected_explanations(monkeypatch):
     rejected = next(item for item in payload["opportunities"] if item["decision"] == "rejected")
     assert accepted["buy_exchange"] == "hyperliquid"
     assert accepted["sell_exchange"] == "bybit"
+    assert accepted["buy_source_event_checksum"] == events[0].checksum
+    assert accepted["sell_source_event_checksum"] == events[1].checksum
+    assert accepted["buy_timestamp_ns"] == events[0].event_time_ns
+    assert accepted["sell_timestamp_ns"] == events[1].event_time_ns
     assert accepted["quantity"] == 0.4
     assert accepted["estimated_profit"] > 0
     assert rejected["rejection_reasons"]
@@ -184,3 +189,43 @@ def test_replay_uses_the_scanner_fee_parameter(monkeypatch):
     payload = response.json()
     assert payload["fill_count"] == 2
     assert payload["portfolio"]["fees_paid"] == pytest.approx((100 + 102) * 7 / 10_000)
+
+
+def test_experiment_grid_builds_each_replay_with_its_fee_parameter(monkeypatch):
+    class CatalogStub:
+        def read(self, dataset_id):
+            assert dataset_id == "fee-grid"
+            return [object(), object(), object(), object()]
+
+    seen_fees: list[float] = []
+
+    class ReplayStub:
+        def __init__(self, timer_interval_ms, fee_bps):
+            assert timer_interval_ms == 1_000
+            seen_fees.append(fee_bps)
+
+        def run(self, events, strategy, starting_cash):
+            class Result:
+                event_count = len(events)
+                return_pct = 0.0
+                max_drawdown_pct = 0.0
+                fill_count = 0
+
+            return Result()
+
+    monkeypatch.setattr(research_persistence, "EventDatasetCatalog", lambda: CatalogStub())
+    monkeypatch.setattr(research_persistence, "DeterministicReplayEngine", ReplayStub)
+
+    result = research_persistence.run_experiment(
+        ExperimentConfig(
+            dataset_id="fee-grid",
+            strategy="cross_exchange_arbitrage",
+            base_parameters={"min_edge_bps": 5},
+            parameter_grid={"fee_bps": [2, 7]},
+            walk_forward_folds=1,
+            monte_carlo_runs=0,
+        )
+    )
+
+    assert seen_fees == [2.0, 7.0]
+    assert {candidate["parameters"]["fee_bps"] for candidate in result["candidates"]} == {2, 7}

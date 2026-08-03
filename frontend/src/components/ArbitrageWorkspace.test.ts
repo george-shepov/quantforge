@@ -6,7 +6,10 @@ import { filterOpportunities, modeGuidance, opportunityLesson } from './Arbitrag
 const accepted: ArbitrageOpportunity = {
   opportunity_id: 'accepted-1',
   timestamp_ns: 2,
-  source_event_checksum: 'abc',
+  buy_timestamp_ns: 1,
+  sell_timestamp_ns: 2,
+  buy_source_event_checksum: 'buy-abc',
+  sell_source_event_checksum: 'sell-abc',
   symbol: 'BTC',
   buy_exchange: 'hyperliquid',
   sell_exchange: 'bybit',

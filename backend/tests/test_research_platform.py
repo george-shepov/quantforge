@@ -8,6 +8,7 @@ from app.research.engine import (
     InventoryMarketMaker,
     monte_carlo_resample,
     parameter_combinations,
+    scan_arbitrage_events,
     walk_forward_windows,
 )
 from app.research.events import EventKind, EventSequencer, MarketEvent, normalize_hyperliquid_message
@@ -60,6 +61,63 @@ def test_arbitrage_candidates_preserve_calculation_and_explain_rejection() -> No
     assert rejected.quantity == 0.4
     assert rejected.decision == "rejected"
     assert "below" in rejected.explanation
+
+
+def test_arbitrage_scan_anchors_both_quotes_and_only_rechecks_updated_pairs() -> None:
+    def book(sequence: int, exchange: str, bid: float, ask: float) -> MarketEvent:
+        return MarketEvent.build(
+            sequence=sequence,
+            exchange=exchange,
+            symbol="BTC",
+            kind=EventKind.BOOK,
+            event_time_ns=sequence * 1_000_000,
+            receive_time_ns=sequence * 1_000_000,
+            payload={
+                "levels": [
+                    [{"px": str(bid), "sz": "1"}],
+                    [{"px": str(ask), "sz": "1"}],
+                ]
+            },
+        )
+
+    events = [
+        book(1, "venue-a", 99, 100),
+        book(2, "venue-b", 101, 102),
+        book(3, "venue-c", 100, 101),
+    ]
+    output = scan_arbitrage_events(events, dataset_id="three-venues", limit=10)
+
+    assert output["candidate_count"] == 6
+    latest = [item for item in output["opportunities"] if item["timestamp_ns"] == 3_000_000]
+    assert len(latest) == 4
+    assert all("venue-c" in {item["buy_exchange"], item["sell_exchange"]} for item in latest)
+
+    checksums = {event.exchange: event.checksum for event in events}
+    for item in output["opportunities"]:
+        assert item["buy_source_event_checksum"] == checksums[item["buy_exchange"]]
+        assert item["sell_source_event_checksum"] == checksums[item["sell_exchange"]]
+    assert len({item["opportunity_id"] for item in output["opportunities"]}) == 6
+
+
+def test_arbitrage_scan_retains_only_the_bounded_response_window() -> None:
+    events = [
+        MarketEvent.build(
+            sequence=sequence,
+            exchange=f"venue-{sequence}",
+            symbol="BTC",
+            kind=EventKind.BOOK,
+            event_time_ns=sequence,
+            receive_time_ns=sequence,
+            payload={"levels": [[{"px": "99", "sz": "1"}], [{"px": "100", "sz": "1"}]]},
+        )
+        for sequence in range(1, 8)
+    ]
+
+    output = scan_arbitrage_events(events, dataset_id="bounded", limit=3)
+
+    assert output["candidate_count"] == 3
+    assert len(output["opportunities"]) == 3
+    assert output["accepted_count"] + output["rejected_count"] == 3
 
 
 def test_inventory_quotes_skew_away_from_long_inventory() -> None:

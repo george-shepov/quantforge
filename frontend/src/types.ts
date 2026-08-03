@@ -186,7 +186,10 @@ export interface ArbitrageScanRequest {
 export interface ArbitrageOpportunity {
   opportunity_id: string
   timestamp_ns: number
-  source_event_checksum: string
+  buy_timestamp_ns: number
+  sell_timestamp_ns: number
+  buy_source_event_checksum: string
+  sell_source_event_checksum: string
   symbol: string
   buy_exchange: string
   sell_exchange: string
