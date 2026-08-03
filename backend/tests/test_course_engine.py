@@ -4,7 +4,9 @@ from app.course.delta import DeltaClassification, compare_expected_actual
 from app.course.fixture import COURSE_DATASET_ID, course_fixture_events, fixture_checksum_chain
 from app.course.runner import CourseScenarioRunner
 from app.course.schema import load_manifest, validate_manifest
+from app.main import app
 from app.research.orderbook import OrderBookSnapshot, Side, simulate_order
+from fastapi.testclient import TestClient
 
 
 def test_starter_manifest_is_versioned_and_safe():
@@ -113,3 +115,17 @@ def test_runner_renders_all_products_from_one_deterministic_evidence_set():
     assert first["provenance"]["dataset_checksum_chain"] == fixture_checksum_chain()
     assert "101.125" in first["research_report"]
     assert first["provenance"]["scenario_version"] == first["schema_version"]
+
+
+def test_course_api_exposes_manifest_fixture_and_runner():
+    client = TestClient(app)
+
+    manifest = client.get("/api/course/manifest")
+    fixture = client.get("/api/course/fixtures/course-btc-l2-v1")
+    run = client.post("/api/course/run", json={"seed": 7, "git_sha": "test-sha"})
+
+    assert manifest.status_code == 200
+    assert fixture.status_code == 200
+    assert run.status_code == 200
+    assert run.json()["provenance"]["quantforge_git_sha"] == "test-sha"
+    assert run.json()["fixture"]["dataset_id"] == fixture.json()["dataset_id"]
