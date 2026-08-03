@@ -3,7 +3,7 @@ export type EventStrategyName = 'cross_exchange_arbitrage' | 'inventory_market_m
 export type ScenarioName = 'baseline' | 'flash_crash' | 'volatility_spike' | 'liquidity_drought' | 'funding_squeeze'
 export type ExchangeName = 'hyperliquid' | 'bybit' | 'bitmex' | 'whitebit' | 'synthetic'
 export type MarketKind = 'spot' | 'perp' | 'future'
-export type WorkspaceName = 'backtest' | 'recordings' | 'replay' | 'experiments' | 'manual' | 'system' | 'history'
+export type WorkspaceName = 'backtest' | 'arbitrage' | 'recordings' | 'replay' | 'experiments' | 'manual' | 'system' | 'history'
 export type StoryMode = 'expert' | 'guided'
 
 export interface RunConfig {
@@ -170,7 +170,23 @@ export interface ReplayResponse {
   max_drawdown_pct: number
   portfolio: Record<string, unknown>
   intents: Array<Record<string, unknown>>
+  opportunities: ArbitrageOpportunity[]
   equity_curve: Array<{ timestamp_ns: number; equity: number }>
+}
+
+export interface ArbitrageOpportunity {
+  timestamp_ns: number
+  symbol: string
+  buy_exchange: string
+  sell_exchange: string
+  buy_price: number
+  sell_price: number
+  quantity: number
+  gross_edge_bps: number
+  expected_edge_bps: number
+  estimated_profit: number
+  decision_status: 'accepted' | 'rejected' | string
+  decision_reason: string
 }
 
 export interface MonteCarloSummary {

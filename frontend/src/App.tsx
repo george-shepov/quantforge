@@ -31,6 +31,7 @@ import { PerformanceChart } from './components/PerformanceChart'
 import { TradesTable } from './components/TradesTable'
 import type {
   BacktestResponse,
+  ArbitrageOpportunity,
   CatalogResponse,
   DatasetManifest,
   EventStrategyName,
@@ -79,7 +80,7 @@ const defaultStoryRequest: ExecutionStoryRequest = {
 }
 
 const tabs: Array<[WorkspaceName, string]> = [
-  ['backtest', 'Backtest'], ['recordings', 'Record'], ['replay', 'Replay'], ['experiments', 'Experiments'],
+  ['backtest', 'Backtest'], ['arbitrage', 'Arbitrage'], ['recordings', 'Record'], ['replay', 'Replay'], ['experiments', 'Experiments'],
   ['manual', 'Trading manual'], ['system', 'System'], ['history', 'History'],
 ]
 
@@ -151,6 +152,7 @@ export default function App() {
       </section>
 
       {workspace === 'backtest' && <BacktestWorkspace catalog={catalog} remember={remember} />}
+      {workspace === 'arbitrage' && <ArbitrageWorkspace datasets={datasets} remember={remember} onChanged={refreshPlatform} />}
       {workspace === 'recordings' && <RecordingWorkspace recordings={recordings} datasets={datasets} onChanged={refreshPlatform} />}
       {workspace === 'replay' && <ReplayWorkspace datasets={datasets} remember={remember} />}
       {workspace === 'experiments' && <ExperimentWorkspace datasets={datasets} experiments={experiments} onChanged={refreshPlatform} remember={remember} />}
@@ -221,6 +223,91 @@ function BacktestWorkspace({ catalog, remember }: { catalog: CatalogResponse | n
       {result ? <>{result.warnings.length > 0 && <div className="warnings">{result.warnings.map((item) => <span key={item}>{item}</span>)}</div>}<MetricGrid metrics={result.metrics} /><PerformanceChart data={result.equity_curve} /><TradesTable trades={result.trades} /></> : <Empty title="NO BACKTEST YET">Configure the market, strategy, execution assumptions, and stress scenario.</Empty>}
     </section>
   </div>
+}
+
+type ArbitrageMode = 'build' | 'guided' | 'watch'
+
+const defaultArbitrageParameters = { min_edge_bps: 5, fee_bps: 2, max_quantity: 1 }
+
+function ArbitrageWorkspace({ datasets, remember, onChanged }: { datasets: DatasetManifest[]; remember: (entry: Omit<HistoryEntry, 'id' | 'createdAt'>) => void; onChanged: () => Promise<void> }) {
+  const [mode, setMode] = useState<ArbitrageMode>('build')
+  const [request, setRequest] = useState<ReplayRequest>({ dataset_id: datasets[0]?.dataset_id ?? '', strategy: 'cross_exchange_arbitrage', parameters: defaultArbitrageParameters, starting_cash: 100000, timer_interval_ms: 1000 })
+  const [parameters, setParameters] = useState(JSON.stringify(defaultArbitrageParameters, null, 2))
+  const [result, setResult] = useState<ReplayResponse | null>(null)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    if (!request.dataset_id && datasets[0]) setRequest((current) => ({ ...current, dataset_id: datasets[0].dataset_id }))
+  }, [datasets, request.dataset_id])
+
+  const opportunities = result?.opportunities ?? []
+  const selected = opportunities[selectedIndex] ?? opportunities[0] ?? null
+  const acceptedCount = opportunities.filter((item) => item.decision_status === 'accepted').length
+  const rejectedCount = opportunities.filter((item) => item.decision_status === 'rejected').length
+
+  async function replay() {
+    setBusy('replay'); setError(''); setNotice('')
+    try {
+      const config = { ...request, strategy: 'cross_exchange_arbitrage' as const, parameters: parseObject(parameters, 'Arbitrage parameters') }
+      const output = await replayDataset(config)
+      setRequest((current) => ({ ...current, parameters: config.parameters }))
+      setResult(output)
+      setSelectedIndex(0)
+      remember({ kind: 'replay', title: `Arbitrage · ${config.dataset_id}`, summary: `${output.opportunities?.filter((item) => item.decision_status === 'accepted').length ?? 0} accepted opportunities`, payload: { config, output } })
+    } catch (err) { setError(messageOf(err)) } finally { setBusy('') }
+  }
+
+  async function addToExperiment() {
+    if (!selected) return
+    setBusy('experiment'); setError(''); setNotice('')
+    try {
+      const baseParameters = parseObject(parameters, 'Arbitrage parameters')
+      const output = await queueExperiment({
+        dataset_id: request.dataset_id,
+        strategy: 'cross_exchange_arbitrage',
+        starting_cash: request.starting_cash,
+        timer_interval_ms: request.timer_interval_ms,
+        base_parameters: baseParameters,
+        parameter_grid: { min_edge_bps: [Number(baseParameters.min_edge_bps ?? 5)], max_quantity: [Number(baseParameters.max_quantity ?? selected.quantity)] },
+        walk_forward_folds: 4,
+        monte_carlo_runs: 500,
+        monte_carlo_block_size: 5,
+        seed: 7,
+      })
+      remember({ kind: 'experiment', title: `Arbitrage · ${selected.symbol}`, summary: `Parameters added to experiment ${output.id}`, payload: output })
+      setNotice(`Experiment ${output.id} queued with the current arbitrage parameters.`)
+      await onChanged()
+    } catch (err) { setError(messageOf(err)) } finally { setBusy('') }
+  }
+
+  return <div className="page-workspace arbitrage-layout">
+    <section className="surface-card arbitrage-controls">
+      <div className="section-heading"><div><span>ARBITRAGE LAB</span><h2>Build a scanner</h2></div><strong>SIMULATION ONLY</strong></div>
+      <div className="mode-toggle mode-toggle-wide" aria-label="Arbitrage presentation mode">
+        <button className={mode === 'build' ? 'active' : ''} onClick={() => setMode('build')}>Build</button>
+        <button className={mode === 'guided' ? 'active' : ''} onClick={() => setMode('guided')}>Guided</button>
+        <button className={mode === 'watch' ? 'active' : ''} onClick={() => setMode('watch')}>Watch &amp; Learn</button>
+      </div>
+      {mode === 'build' ? <><DatasetSelect datasets={datasets} value={request.dataset_id} onChange={(dataset_id) => setRequest({ ...request, dataset_id })} /><Field label="Arbitrage parameters"><textarea value={parameters} onChange={(event) => setParameters(event.target.value)} rows={7} /></Field><div className="field-row"><NumberField label="Starting cash" value={request.starting_cash} onChange={(starting_cash) => setRequest({ ...request, starting_cash })} /><NumberField label="Timer ms" value={request.timer_interval_ms} onChange={(timer_interval_ms) => setRequest({ ...request, timer_interval_ms })} /></div><button className="run" onClick={() => void replay()} disabled={Boolean(busy) || !request.dataset_id}>{busy === 'replay' ? 'REPLAYING…' : 'SCAN DATASET'}</button></> : <div className="arb-mode-copy"><strong>{mode === 'guided' ? 'Understand every decision.' : 'Observe before you act.'}</strong><p>{mode === 'guided' ? 'The scanner uses the replay strategy unchanged. Select an opportunity to inspect prices, fees, edge, and the threshold decision.' : 'Watch & Learn is read-only: it presents deterministic replay observations and never submits an order.'}</p></div>}
+      {result && <div className="arb-run-summary"><span>LAST REPLAY</span><b>{result.event_count.toLocaleString()} events · {acceptedCount} accepted · {rejectedCount} rejected</b></div>}
+      {busy === 'experiment' && <p className="safety">ADDING parameters to experiment…</p>}
+      {notice && <div className="success">{notice}</div>}
+      {error && <div className="error">{error}</div>}
+    </section>
+    <section className="surface-card arbitrage-surface">
+      <div className="section-heading"><div><span>CENTRAL OPPORTUNITY SURFACE</span><h2>Cross-venue opportunities</h2></div><strong>{opportunities.length} CANDIDATES</strong></div>
+      {!result ? <Empty title="NO SCAN YET">Choose a recorded dataset, then scan it with the existing cross-exchange arbitrage strategy.</Empty> : opportunities.length === 0 ? <Empty title="NO CANDIDATES">No synchronized cross-venue book pair was available in this replay.</Empty> : <><div className="arbitrage-metrics"><Metric label="Accepted" value={String(acceptedCount)} /><Metric label="Rejected" value={String(rejectedCount)} /><Metric label="Intents" value={String(result.order_intent_count)} /><Metric label="Final equity" value={money(result.final_equity)} /></div><div className="arbitrage-list" role="list" aria-label="Arbitrage opportunities">{opportunities.map((opportunity, index) => <button key={`${opportunity.timestamp_ns}-${opportunity.buy_exchange}-${opportunity.sell_exchange}-${index}`} className={`arbitrage-row ${selectedIndex === index ? 'selected' : ''}`} onClick={() => setSelectedIndex(index)} role="listitem"><span className="arb-pair"><b>{opportunity.symbol}</b><small>{opportunity.buy_exchange} → {opportunity.sell_exchange}</small></span><span><small>Gross edge</small><b>{opportunity.gross_edge_bps.toFixed(2)} bps</b></span><span><small>Expected edge</small><b className={opportunity.expected_edge_bps >= 0 ? 'positive' : 'negative'}>{opportunity.expected_edge_bps.toFixed(2)} bps</b></span><span><small>Available qty</small><b>{opportunity.quantity}</b></span><span><small>Est. profit</small><b className={opportunity.estimated_profit >= 0 ? 'positive' : 'negative'}>{money(opportunity.estimated_profit)}</b></span><strong className={`status-${opportunity.decision_status}`}>{opportunity.decision_status}</strong></button>)}</div><ArbitrageDetail opportunity={selected} mode={mode} parameters={request.parameters} busy={Boolean(busy)} onReplay={() => void replay()} onExperiment={() => void addToExperiment()} /></>}
+    </section>
+  </div>
+}
+
+function ArbitrageDetail({ opportunity, mode, parameters, busy, onReplay, onExperiment }: { opportunity: ArbitrageOpportunity | null; mode: ArbitrageMode; parameters: Record<string, unknown>; busy: boolean; onReplay: () => void; onExperiment: () => void }) {
+  if (!opportunity) return null
+  const feeBps = Number(parameters.fee_bps ?? 2) * 2
+  return <div className="arbitrage-detail"><div className="detail-toolbar"><code>{new Date(opportunity.timestamp_ns / 1_000_000).toLocaleString()} · {opportunity.symbol}</code><div className="arb-actions"><button className="ghost-button compact" onClick={onReplay} disabled={busy}>REPLAY OPPORTUNITY</button><button className="ghost-button compact" onClick={onExperiment} disabled={busy}>ADD TO EXPERIMENT</button></div></div><div className="arb-decision"><span className={`status-${opportunity.decision_status}`}>{opportunity.decision_status.toUpperCase()}</span><p>{opportunity.decision_status === 'accepted' ? `Accepted because the ${opportunity.expected_edge_bps.toFixed(2)} bps expected edge meets the configured minimum.` : `Rejected because the ${opportunity.expected_edge_bps.toFixed(2)} bps expected edge is below the configured minimum.`}</p></div>{mode === 'guided' && <div className="guided-sections"><section><h3>Net-edge anatomy</h3><ul><li>Gross spread: {opportunity.gross_edge_bps.toFixed(2)} bps</li><li>Buy + sell fees: {feeBps.toFixed(2)} bps</li><li>Expected edge: {opportunity.expected_edge_bps.toFixed(2)} bps</li><li>Estimated profit: {money(opportunity.estimated_profit)}</li></ul></section><section><h3>Decision evidence</h3><ul><li>Buy {opportunity.quantity} {opportunity.symbol} at {opportunity.buy_exchange}</li><li>Sell at {opportunity.sell_exchange}</li><li>Available quantity is the smaller displayed top-of-book size, capped by max quantity.</li><li>Phase 1 uses the strategy's existing fee-only calculation; no order is submitted.</li></ul></section></div>}{mode === 'watch' && <p className="arb-watch-note">Observation only. This candidate is a replay observation, not an executable order.</p>}</div>
 }
 
 function RecordingWorkspace({ recordings, datasets, onChanged }: { recordings: RecordingStatus[]; datasets: DatasetManifest[]; onChanged: () => Promise<void> }) {

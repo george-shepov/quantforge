@@ -3,7 +3,9 @@ from __future__ import annotations
 from app.research.engine import (
     BookQuote,
     CrossExchangeArbitrageEngine,
+    DeterministicReplayEngine,
     InventoryMarketMaker,
+    make_strategy,
     monte_carlo_resample,
     parameter_combinations,
     walk_forward_windows,
@@ -41,6 +43,42 @@ def test_cross_exchange_arbitrage_detects_net_edge() -> None:
     assert opportunities[0].buy_exchange == "a"
     assert opportunities[0].sell_exchange == "b"
     assert opportunities[0].quantity == 2
+
+
+def test_cross_exchange_replay_reports_accepted_and_rejected_candidates() -> None:
+    events = [
+        MarketEvent.build(
+            sequence=1,
+            exchange="a",
+            symbol="BTC",
+            kind=EventKind.BOOK,
+            event_time_ns=1,
+            receive_time_ns=1,
+            payload={"levels": [[{"px": "99", "sz": "2"}], [{"px": "100", "sz": "2"}]]},
+        ),
+        MarketEvent.build(
+            sequence=2,
+            exchange="b",
+            symbol="BTC",
+            kind=EventKind.BOOK,
+            event_time_ns=2,
+            receive_time_ns=2,
+            payload={"levels": [[{"px": "101", "sz": "3"}], [{"px": "102", "sz": "3"}]]},
+        ),
+    ]
+
+    result = DeterministicReplayEngine().run(
+        events,
+        make_strategy("cross_exchange_arbitrage", {"min_edge_bps": 5, "fee_bps": 1, "max_quantity": 2}),
+    )
+
+    assert result.opportunities
+    accepted = next(item for item in result.opportunities if item["decision_status"] == "accepted")
+    rejected = next(item for item in result.opportunities if item["decision_status"] == "rejected")
+    assert (accepted["buy_exchange"], accepted["sell_exchange"]) == ("a", "b")
+    assert accepted["gross_edge_bps"] > accepted["expected_edge_bps"]
+    assert accepted["estimated_profit"] > 0
+    assert rejected["decision_reason"] == "expected_edge_below_minimum"
 
 
 def test_inventory_quotes_skew_away_from_long_inventory() -> None:

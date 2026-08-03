@@ -128,6 +128,12 @@ class ArbitrageOpportunity:
     quantity: float
     gross_edge_bps: float
     expected_edge_bps: float
+    decision_status: str = "accepted"
+    decision_reason: str = "expected_edge_meets_minimum"
+
+    @property
+    def estimated_profit(self) -> float:
+        return self.buy_price * self.quantity * self.expected_edge_bps / 10_000
 
 
 class CrossExchangeArbitrageEngine:
@@ -142,6 +148,9 @@ class CrossExchangeArbitrageEngine:
         return self.scan(quote.symbol)
 
     def scan(self, symbol: str) -> list[ArbitrageOpportunity]:
+        return [item for item in self.scan_candidates(symbol) if item.decision_status == "accepted"]
+
+    def scan_candidates(self, symbol: str) -> list[ArbitrageOpportunity]:
         books = [book for (_, candidate), book in self.books.items() if candidate == symbol]
         opportunities: list[ArbitrageOpportunity] = []
         for buy, sell in itertools.permutations(books, 2):
@@ -149,19 +158,21 @@ class CrossExchangeArbitrageEngine:
                 continue
             gross = (sell.bid - buy.ask) / buy.ask * 10_000
             expected = gross - 2 * self.fee_bps
-            if expected >= self.min_edge_bps:
-                opportunities.append(
-                    ArbitrageOpportunity(
-                        symbol=symbol,
-                        buy_exchange=buy.exchange,
-                        sell_exchange=sell.exchange,
-                        buy_price=buy.ask,
-                        sell_price=sell.bid,
-                        quantity=min(buy.ask_size, sell.bid_size, self.max_quantity),
-                        gross_edge_bps=gross,
-                        expected_edge_bps=expected,
-                    )
+            accepted = expected >= self.min_edge_bps
+            opportunities.append(
+                ArbitrageOpportunity(
+                    symbol=symbol,
+                    buy_exchange=buy.exchange,
+                    sell_exchange=sell.exchange,
+                    buy_price=buy.ask,
+                    sell_price=sell.bid,
+                    quantity=min(buy.ask_size, sell.bid_size, self.max_quantity),
+                    gross_edge_bps=gross,
+                    expected_edge_bps=expected,
+                    decision_status="accepted" if accepted else "rejected",
+                    decision_reason="expected_edge_meets_minimum" if accepted else "expected_edge_below_minimum",
                 )
+            )
         return sorted(opportunities, key=lambda item: item.expected_edge_bps, reverse=True)
 
 
@@ -237,6 +248,7 @@ class StrategyContext:
     event: MarketEvent
     books: dict[tuple[str, str], BookQuote]
     intents: list[OrderIntent] = field(default_factory=list)
+    opportunities: list[ArbitrageOpportunity] = field(default_factory=list)
 
     def order(self, intent: OrderIntent) -> None:
         self.intents.append(intent)
@@ -276,7 +288,10 @@ class CrossVenueArbitrageStrategy(Strategy):
         quote = context.books.get((context.event.exchange, context.event.symbol))
         if not quote:
             return
-        opportunities = self.engine.update(quote)
+        self.engine.update(quote)
+        candidates = self.engine.scan_candidates(quote.symbol)
+        context.opportunities.extend(candidates)
+        opportunities = [item for item in candidates if item.decision_status == "accepted"]
         if not opportunities:
             return
         best = opportunities[0]
@@ -351,6 +366,7 @@ class ReplayResult(BaseModel):
     max_drawdown_pct: float
     portfolio: dict[str, Any]
     intents: list[dict[str, Any]]
+    opportunities: list[dict[str, Any]]
     equity_curve: list[dict[str, Any]]
 
 
@@ -364,6 +380,7 @@ class DeterministicReplayEngine:
         portfolio = Portfolio(starting_cash)
         books: dict[tuple[str, str], BookQuote] = {}
         all_intents: list[dict[str, Any]] = []
+        all_opportunities: list[dict[str, Any]] = []
         curve: list[dict[str, Any]] = []
         fill_count = 0
         timer_count = 0
@@ -383,6 +400,23 @@ class DeterministicReplayEngine:
             }.get(event.kind)
             if callback:
                 callback(context)
+            for opportunity in context.opportunities:
+                all_opportunities.append(
+                    {
+                        "timestamp_ns": event.event_time_ns,
+                        "symbol": opportunity.symbol,
+                        "buy_exchange": opportunity.buy_exchange,
+                        "sell_exchange": opportunity.sell_exchange,
+                        "buy_price": opportunity.buy_price,
+                        "sell_price": opportunity.sell_price,
+                        "quantity": opportunity.quantity,
+                        "gross_edge_bps": opportunity.gross_edge_bps,
+                        "expected_edge_bps": opportunity.expected_edge_bps,
+                        "estimated_profit": opportunity.estimated_profit,
+                        "decision_status": opportunity.decision_status,
+                        "decision_reason": opportunity.decision_reason,
+                    }
+                )
             for intent in context.intents:
                 fill = self._simulate_fill(intent, books, event.event_time_ns)
                 record = intent.model_dump()
@@ -428,6 +462,7 @@ class DeterministicReplayEngine:
             max_drawdown_pct=max_drawdown,
             portfolio=portfolio.snapshot(),
             intents=all_intents[-500:],
+            opportunities=all_opportunities[-1_000:],
             equity_curve=curve,
         )
 
