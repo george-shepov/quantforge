@@ -283,7 +283,12 @@ class EventDatasetCatalog:
             target = (base / part).resolve()
             if base.resolve() not in target.parents:
                 raise ValueError("Dataset manifest contains an invalid part path")
-            table = pq.read_table(target)
+            # Read the manifest-listed file directly. ``pq.read_table`` routes a
+            # path through the dataset API, which interprets our Hive-style
+            # directories (``exchange=.../symbol=...``) as partition columns.
+            # Those inferred dictionary columns conflict with the string
+            # exchange/symbol columns stored in each Parquet file.
+            table = pq.ParquetFile(target).read()
             for row in table.to_pylist():
                 events.append(
                     MarketEvent(
