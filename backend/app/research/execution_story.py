@@ -224,8 +224,8 @@ class ExecutionRunStore:
     def get(self, run_id: str) -> dict:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", run_id):
             raise FileNotFoundError(run_id)
-        target = self.root / f"{run_id}.json"
-        if not target.exists():
+        target = next((path for path in self.root.glob("*.json") if path.stem == run_id), None)
+        if target is None or not target.exists():
             raise FileNotFoundError(run_id)
         return json.loads(target.read_text())
 
