@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-AGENT_COMMAND_PREFIX = "quantforge-vault-read"
+AGENT_COMMAND_PREFIX = "get"
 PROFILE = "quantforge/eu-london/azure-storage"
 EXPECTED_ACCOUNT_NAME = "quantforgeukweststorage"
 EXPECTED_ENV_NAMES = frozenset(

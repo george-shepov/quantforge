@@ -6,7 +6,7 @@ over a dedicated forced SSH command before starting Compose. The account name
 is non-secret configuration and remains pinned to the expected Azure account:
 
 ```text
-quantforge-vault-read quantforge/eu-london/azure-storage-connection-string
+get quantforge/eu-london/azure-storage-connection-string
 ```
 
 The generated runtime file contains only:
