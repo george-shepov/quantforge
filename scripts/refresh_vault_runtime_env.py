@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-AGENT_COMMAND = "quantforge/eu-london/azure-storage"
+AGENT_COMMAND_PREFIX = "quantforge-vault-read"
 PROFILE = "quantforge/eu-london/azure-storage"
 EXPECTED_ACCOUNT_NAME = "quantforgeukweststorage"
 EXPECTED_ENV_NAMES = frozenset(
@@ -65,6 +65,16 @@ def fetch_payload(
 ) -> dict[str, str]:
     """Fetch the fixed profile over strict, non-interactive SSH."""
 
+def fetch_secret(
+    *,
+    destination: str,
+    identity_file: Path,
+    known_hosts: Path,
+    path: str,
+    runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> str:
+    """Fetch one allowlisted path over strict, non-interactive SSH."""
+
     command = [
         "ssh",
         "-o",
@@ -80,16 +90,53 @@ def fetch_payload(
         "-i",
         str(identity_file),
         destination,
-        AGENT_COMMAND,
+        f"{AGENT_COMMAND_PREFIX} {path}",
     ]
     result = runner(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if result.returncode != 0:
         raise VaultRuntimeError("Vault agent request failed")
     try:
-        payload = json.loads(result.stdout)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise VaultRuntimeError("Vault agent returned invalid JSON") from exc
-    return validate_payload(payload)
+        value = result.stdout.decode("utf-8").rstrip("\n")
+    except UnicodeDecodeError as exc:
+        raise VaultRuntimeError("Vault agent returned invalid text") from exc
+    if not value or "\x00" in value or "\n" in value or "\r" in value:
+        raise VaultRuntimeError("Vault agent returned an invalid secret")
+    return value
+
+
+def fetch_payload(
+    *,
+    destination: str,
+    identity_file: Path,
+    known_hosts: Path,
+    runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> dict[str, str]:
+    """Fetch the two Azure paths needed by the current runtime."""
+
+    account_name = fetch_secret(
+        destination=destination,
+        identity_file=identity_file,
+        known_hosts=known_hosts,
+        path="quantforge/eu-london/azure-storage-account-name",
+        runner=runner,
+    )
+    connection_string = fetch_secret(
+        destination=destination,
+        identity_file=identity_file,
+        known_hosts=known_hosts,
+        path="quantforge/eu-london/azure-storage-connection-string",
+        runner=runner,
+    )
+    return validate_payload(
+        {
+            "schema": 1,
+            "profile": PROFILE,
+            "secrets": {
+                "AZURE_STORAGE_ACCOUNT_NAME": account_name,
+                "AZURE_STORAGE_CONNECTION_STRING": connection_string,
+            },
+        }
+    )
 
 
 def write_runtime_env(secrets: dict[str, str], output: Path) -> None:

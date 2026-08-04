@@ -1,14 +1,15 @@
 # QuantForge runtime secrets
 
 QuantForge does not call the interactive Vault web UI and does not carry the
-Vault master password. The London host refreshes one fixed profile over a
-dedicated forced SSH command before starting Compose:
+Vault master password. The London host refreshes two exact allowlisted paths
+over a dedicated forced SSH command before starting Compose:
 
 ```text
-quantforge/eu-london/azure-storage
+quantforge-vault-read quantforge/eu-london/azure-storage-account-name
+quantforge-vault-read quantforge/eu-london/azure-storage-connection-string
 ```
 
-The response contains only:
+The generated runtime file contains only:
 
 ```text
 AZURE_STORAGE_ACCOUNT_NAME
