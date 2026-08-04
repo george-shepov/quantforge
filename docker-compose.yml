@@ -39,6 +39,8 @@ services:
       QUANTFORGE_TESTNET_MAX_NOTIONAL: ${QUANTFORGE_TESTNET_MAX_NOTIONAL:-100}
       HYPERLIQUID_TESTNET_PRIVATE_KEY: ${HYPERLIQUID_TESTNET_PRIVATE_KEY:-}
       HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS: ${HYPERLIQUID_TESTNET_ACCOUNT_ADDRESS:-}
+    env_file:
+      - ${QUANTFORGE_RUNTIME_ENV_FILE:-/dev/null}
     volumes:
       - quantforge-data:/data/quantforge
     depends_on:
@@ -61,6 +63,8 @@ services:
       QUANTFORGE_DATA_ROOT: /data/quantforge
       DATABASE_URL: postgresql+psycopg://quantforge:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/quantforge
       REDIS_URL: redis://redis:6379/0
+    env_file:
+      - ${QUANTFORGE_RUNTIME_ENV_FILE:-/dev/null}
     volumes:
       - quantforge-data:/data/quantforge
     depends_on:
