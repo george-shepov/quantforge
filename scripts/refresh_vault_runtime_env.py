@@ -56,15 +56,6 @@ def validate_payload(payload: Any) -> dict[str, str]:
     return {name: secrets[name] for name in sorted(EXPECTED_ENV_NAMES)}
 
 
-def fetch_payload(
-    *,
-    destination: str,
-    identity_file: Path,
-    known_hosts: Path,
-    runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
-) -> dict[str, str]:
-    """Fetch the fixed profile over strict, non-interactive SSH."""
-
 def fetch_secret(
     *,
     destination: str,
@@ -111,15 +102,8 @@ def fetch_payload(
     known_hosts: Path,
     runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
 ) -> dict[str, str]:
-    """Fetch the two Azure paths needed by the current runtime."""
+    """Fetch the connection string; the account name is non-secret config."""
 
-    account_name = fetch_secret(
-        destination=destination,
-        identity_file=identity_file,
-        known_hosts=known_hosts,
-        path="quantforge/eu-london/azure-storage-account-name",
-        runner=runner,
-    )
     connection_string = fetch_secret(
         destination=destination,
         identity_file=identity_file,
@@ -132,7 +116,7 @@ def fetch_payload(
             "schema": 1,
             "profile": PROFILE,
             "secrets": {
-                "AZURE_STORAGE_ACCOUNT_NAME": account_name,
+                "AZURE_STORAGE_ACCOUNT_NAME": EXPECTED_ACCOUNT_NAME,
                 "AZURE_STORAGE_CONNECTION_STRING": connection_string,
             },
         }

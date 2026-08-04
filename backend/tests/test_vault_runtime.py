@@ -60,10 +60,7 @@ def test_fetch_payload_uses_strict_ssh_and_fixed_command(tmp_path, monkeypatch):
         calls.append(command)
         assert kwargs["stdout"] == subprocess.PIPE
         assert kwargs["stderr"] == subprocess.PIPE
-        if command[-1].endswith("account-name"):
-            value = "quantforgeukweststorage"
-        else:
-            value = payload()["secrets"]["AZURE_STORAGE_CONNECTION_STRING"]
+        value = payload()["secrets"]["AZURE_STORAGE_CONNECTION_STRING"]
         return subprocess.CompletedProcess(command, 0, (value + "\n").encode(), b"")
 
     result = fetch_payload(
@@ -74,8 +71,8 @@ def test_fetch_payload_uses_strict_ssh_and_fixed_command(tmp_path, monkeypatch):
     )
 
     assert result["AZURE_STORAGE_ACCOUNT_NAME"] == "quantforgeukweststorage"
-    assert calls[0][-1] == f"{AGENT_COMMAND_PREFIX} quantforge/eu-london/azure-storage-account-name"
-    assert calls[1][-1] == f"{AGENT_COMMAND_PREFIX} quantforge/eu-london/azure-storage-connection-string"
+    assert len(calls) == 1
+    assert calls[0][-1] == f"{AGENT_COMMAND_PREFIX} quantforge/eu-london/azure-storage-connection-string"
     assert "StrictHostKeyChecking=yes" in calls[0]
     assert "IdentitiesOnly=yes" in calls[0]
 

@@ -1,11 +1,11 @@
 # QuantForge runtime secrets
 
 QuantForge does not call the interactive Vault web UI and does not carry the
-Vault master password. The London host refreshes two exact allowlisted paths
-over a dedicated forced SSH command before starting Compose:
+Vault master password. The London host refreshes the connection-string path
+over a dedicated forced SSH command before starting Compose. The account name
+is non-secret configuration and remains pinned to the expected Azure account:
 
 ```text
-quantforge-vault-read quantforge/eu-london/azure-storage-account-name
 quantforge-vault-read quantforge/eu-london/azure-storage-connection-string
 ```
 
@@ -16,7 +16,7 @@ AZURE_STORAGE_ACCOUNT_NAME
 AZURE_STORAGE_CONNECTION_STRING
 ```
 
-The refresh helper validates the profile, account name, and connection-string
+The refresh helper validates the pinned account name and the connection-string
 account name, then atomically writes:
 
 ```text
