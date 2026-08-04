@@ -6,6 +6,8 @@ on:
       - .github/workflows/deploy-source-to-vps.yml
       - .github/workflows/validate-vault-adapter.yml
       - .env.example
+      - docker-compose.yml
+      - scripts/refresh_vault_runtime_env.py
   workflow_dispatch:
 
 permissions:
@@ -41,12 +43,20 @@ jobs:
         run: |
           set -Eeuo pipefail
           workflow=.github/workflows/deploy-source-to-vps.yml
-          grep -q '/opt/shepov-vault/bin/import-legacy-app-secrets quantforge' "$workflow"
-          grep -q -- '--source-env "$ENV_FILE"' "$workflow"
-          grep -q '/opt/shepov-vault/bin/apply-app-secrets quantforge' "$workflow"
-          grep -q -- '--compatibility-target "$ENV_FILE"' "$workflow"
-          grep -q 'shepov_secrets_vault' "$workflow"
+          grep -q 'VAULT_AGENT_CONFIG=/etc/quantforge/vault-agent/config' "$workflow"
+          grep -q 'scripts/refresh_vault_runtime_env.py' "$workflow"
+          grep -q -- '--destination "$VAULT_SSH_DEST"' "$workflow"
+          grep -q -- '--output /run/quantforge/azure-storage.env' "$workflow"
+          grep -q 'export QUANTFORGE_RUNTIME_ENV_FILE=/run/quantforge/azure-storage.env' "$workflow"
           grep -q 'chmod 600 "$ENV_FILE"' "$workflow"
+          ! grep -q '/opt/shepov-vault/bin/import-legacy-app-secrets' "$workflow"
+          ! grep -q 'retaining the existing mode-0600 QuantForge environment file' "$workflow"
+
+      - name: Confirm Compose consumes only the generated runtime file
+        run: |
+          set -Eeuo pipefail
+          grep -q '\${QUANTFORGE_RUNTIME_ENV_FILE:-/dev/null}' docker-compose.yml
+          grep -q '^EXPECTED_ACCOUNT_NAME = "quantforgeukweststorage"' scripts/refresh_vault_runtime_env.py
 
       - name: Confirm current secret contract remains documented
         run: |

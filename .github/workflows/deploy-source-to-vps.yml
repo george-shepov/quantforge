@@ -98,19 +98,31 @@ jobs:
           fi
           chmod 600 "$ENV_FILE"
 
-          if [ -x /opt/shepov-vault/bin/import-legacy-app-secrets ] && \
-             [ -x /opt/shepov-vault/bin/apply-app-secrets ] && \
-             docker inspect --format '{{.State.Running}}' shepov_secrets_vault 2>/dev/null | grep -qx true; then
-            /opt/shepov-vault/bin/import-legacy-app-secrets quantforge \
-              --policy-file /opt/shepov-vault/app-secret-policies.json \
-              --source-env "$ENV_FILE"
-            /opt/shepov-vault/bin/apply-app-secrets quantforge \
-              --policy-file /opt/shepov-vault/app-secret-policies.json \
-              --compatibility-target "$ENV_FILE"
-            echo "QuantForge secrets loaded from the standalone vault policy."
-          else
-            echo "WARNING: standalone vault broker is not installed; retaining the existing mode-0600 QuantForge environment file." >&2
+          VAULT_AGENT_CONFIG=/etc/quantforge/vault-agent/config
+          if ! sudo -n test -r "$VAULT_AGENT_CONFIG"; then
+            echo "ERROR: Vault agent config is missing: $VAULT_AGENT_CONFIG" >&2
+            exit 1
           fi
+          vault_config_value() {
+            sudo -n awk -F= -v name="$1" \
+              '$1 == name {sub(/^[^=]*=/, ""); print; exit}' \
+              "$VAULT_AGENT_CONFIG"
+          }
+          VAULT_SSH_DEST=$(vault_config_value VAULT_SSH_DEST)
+          VAULT_SSH_KEY_FILE=$(vault_config_value VAULT_SSH_KEY_FILE)
+          VAULT_SSH_KNOWN_HOSTS=$(vault_config_value VAULT_SSH_KNOWN_HOSTS)
+          : "${VAULT_SSH_DEST:?VAULT_SSH_DEST is required in the Vault agent config}"
+          : "${VAULT_SSH_KEY_FILE:?VAULT_SSH_KEY_FILE is required in the Vault agent config}"
+          : "${VAULT_SSH_KNOWN_HOSTS:?VAULT_SSH_KNOWN_HOSTS is required in the Vault agent config}"
+          sudo -n test -r "$VAULT_SSH_KEY_FILE"
+          sudo -n test -r "$VAULT_SSH_KNOWN_HOSTS"
+          sudo -n install -d -o root -g root -m 700 /run/quantforge
+          sudo -n python3 "$DEPLOY_DIR/scripts/refresh_vault_runtime_env.py" \
+            --destination "$VAULT_SSH_DEST" \
+            --identity-file "$VAULT_SSH_KEY_FILE" \
+            --known-hosts "$VAULT_SSH_KNOWN_HOSTS" \
+            --output /run/quantforge/azure-storage.env
+          export QUANTFORGE_RUNTIME_ENV_FILE=/run/quantforge/azure-storage.env
 
           docker network inspect shepov_edge >/dev/null 2>&1 || docker network create shepov_edge
           docker compose -p quantforge up -d --build --remove-orphans
