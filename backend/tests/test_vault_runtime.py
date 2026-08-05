@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from scripts.refresh_vault_runtime_env import (
-    AGENT_COMMAND,
+    AGENT_COMMAND_PREFIX,
     PROFILE,
     VaultRuntimeError,
     fetch_payload,
@@ -60,7 +60,8 @@ def test_fetch_payload_uses_strict_ssh_and_fixed_command(tmp_path, monkeypatch):
         calls.append(command)
         assert kwargs["stdout"] == subprocess.PIPE
         assert kwargs["stderr"] == subprocess.PIPE
-        return subprocess.CompletedProcess(command, 0, json.dumps(payload()).encode(), b"")
+        value = payload()["secrets"]["AZURE_STORAGE_CONNECTION_STRING"]
+        return subprocess.CompletedProcess(command, 0, (value + "\n").encode(), b"")
 
     result = fetch_payload(
         destination="vault-agent@example",
@@ -70,7 +71,8 @@ def test_fetch_payload_uses_strict_ssh_and_fixed_command(tmp_path, monkeypatch):
     )
 
     assert result["AZURE_STORAGE_ACCOUNT_NAME"] == "quantforgeukweststorage"
-    assert calls[0][-1] == AGENT_COMMAND
+    assert len(calls) == 1
+    assert calls[0][-1] == f"{AGENT_COMMAND_PREFIX} quantforge/eu-london/azure-storage-connection-string"
     assert "StrictHostKeyChecking=yes" in calls[0]
     assert "IdentitiesOnly=yes" in calls[0]
 
