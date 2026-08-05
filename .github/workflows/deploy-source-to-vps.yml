@@ -102,13 +102,27 @@ jobs:
           fi
           chmod 600 "$ENV_FILE"
 
-          # The canonical VPS owns the full application stack. London-only Vault
-          # agent prerequisites are intentionally not checked in this workflow.
-          export QUANTFORGE_RUNTIME_ENV_FILE=/dev/null
+          VAULT_REFRESH_WRAPPER=/usr/local/sbin/quantforge-refresh-vault-runtime
+          if [ ! -x "$VAULT_REFRESH_WRAPPER" ]; then
+            echo "ERROR: root-owned Vault refresh wrapper is missing: $VAULT_REFRESH_WRAPPER" >&2
+            exit 1
+          fi
+          sudo -n "$VAULT_REFRESH_WRAPPER"
+          export QUANTFORGE_RUNTIME_ENV_FILE=/run/quantforge/azure-storage.env
+          sudo -n test -r "$QUANTFORGE_RUNTIME_ENV_FILE" || {
+            echo "ERROR: generated runtime environment is not readable to the privileged Compose invocation" >&2
+            exit 1
+          }
 
-          docker network inspect shepov_edge >/dev/null 2>&1 || docker network create shepov_edge
-          docker compose -p quantforge up -d --build --remove-orphans
-          docker compose -p quantforge exec -T api \
+          # The Vault helper intentionally leaves the runtime file root-only.
+          # Run Compose with the same non-interactive root privilege so it can
+          # read /run/quantforge/azure-storage.env without weakening its mode.
+          sudo -n docker network inspect shepov_edge >/dev/null 2>&1 || \
+            sudo -n docker network create shepov_edge
+          sudo -n env QUANTFORGE_RUNTIME_ENV_FILE="$QUANTFORGE_RUNTIME_ENV_FILE" \
+            docker compose -p quantforge up -d --build --remove-orphans
+          sudo -n env QUANTFORGE_RUNTIME_ENV_FILE="$QUANTFORGE_RUNTIME_ENV_FILE" \
+            docker compose -p quantforge exec -T api \
             python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/api/health')"
-          docker exec quantforge_terminal wget -qO- http://127.0.0.1/api/health | grep -q quantforge-api
+          sudo -n docker exec quantforge_terminal wget -qO- http://127.0.0.1/api/health | grep -q quantforge-api
           REMOTE
