@@ -115,8 +115,9 @@ def test_whitebit_candles_map_documented_array_order(monkeypatch):
 
 
 def test_bybit_403_lists_documented_possible_causes(monkeypatch):
+    monkeypatch.setenv("BYBIT_REGIONAL_CONNECTOR_PREFER", "false")
     FakeClient.response = FakeResponse({}, status_code=403)
     monkeypatch.setattr("app.exchanges.bybit.httpx.AsyncClient", FakeClient)
 
-    with pytest.raises(ExchangeAdapterError, match="IP rate limiting"):
+    with pytest.raises(ExchangeAdapterError, match="direct=HTTP 403"):
         asyncio.run(BybitAdapter().fetch_candles(request(ExchangeName.BYBIT)))

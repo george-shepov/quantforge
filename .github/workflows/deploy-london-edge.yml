@@ -1,0 +1,104 @@
+name: Deploy QuantForge London edge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - docker-compose.eu.yml
+      - edge/london-connector/**
+      - .github/workflows/deploy-london-edge.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantforge-london-edge-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy-london:
+    if: ${{ vars.ENABLE_LONDON_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-london
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure London SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LONDON_VPS_SSH_PRIVATE_KEY }}
+
+      - name: Trust London host key
+        env:
+          LONDON_VPS_HOST: ${{ secrets.LONDON_VPS_HOST }}
+          LONDON_VPS_PORT: ${{ secrets.LONDON_VPS_PORT }}
+        run: |
+          set -euo pipefail
+          : "${LONDON_VPS_HOST:?LONDON_VPS_HOST is required}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "${LONDON_VPS_PORT:-22}" -H "$LONDON_VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy London connector only
+        env:
+          LONDON_VPS_HOST: ${{ secrets.LONDON_VPS_HOST }}
+          LONDON_VPS_USER: ${{ secrets.LONDON_VPS_USER }}
+          LONDON_VPS_PORT: ${{ secrets.LONDON_VPS_PORT }}
+          LONDON_DEPLOY_DIR: ${{ secrets.LONDON_DEPLOY_DIR }}
+        run: |
+          set -euo pipefail
+          : "${LONDON_VPS_HOST:?LONDON_VPS_HOST is required}"
+          : "${LONDON_VPS_USER:?LONDON_VPS_USER is required}"
+          : "${LONDON_DEPLOY_DIR:?LONDON_DEPLOY_DIR is required}"
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -p "${LONDON_VPS_PORT:-22}")
+
+          ssh "${ssh_opts[@]}" "$LONDON_VPS_USER@$LONDON_VPS_HOST" \
+            "mkdir -p '$LONDON_DEPLOY_DIR'"
+
+          tar --exclude-vcs --exclude='./.github' -czf - \
+            docker-compose.eu.yml edge/london-connector | \
+            ssh "${ssh_opts[@]}" "$LONDON_VPS_USER@$LONDON_VPS_HOST" \
+            "set -e; tar -xzf - -C '$LONDON_DEPLOY_DIR'"
+
+          ssh "${ssh_opts[@]}" "$LONDON_VPS_USER@$LONDON_VPS_HOST" \
+            "LONDON_DEPLOY_DIR='$LONDON_DEPLOY_DIR' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          DEPLOY_DIR="$LONDON_DEPLOY_DIR"
+          cd "$DEPLOY_DIR"
+
+          # London is the only deployment target that requires the dedicated
+          # Vault-agent trust chain and scoped runtime configuration.
+          VAULT_AGENT_CONFIG=/etc/quantforge/vault-agent/config
+          if ! sudo -n test -r "$VAULT_AGENT_CONFIG"; then
+            echo "ERROR: London Vault agent config is missing: $VAULT_AGENT_CONFIG" >&2
+            exit 1
+          fi
+          sudo -n test -r /etc/quantforge/vault-agent/id_ed25519
+          sudo -n test -r /etc/quantforge/vault-agent/known_hosts
+
+          # The connector HMAC secret is provisioned locally by the Vault agent
+          # or administrator and is never copied through GitHub Actions.
+          CONNECTOR_ENV=/etc/quantforge/london-connector.env
+          if ! test -r "$CONNECTOR_ENV"; then
+            echo "ERROR: London connector environment is missing or unreadable: $CONNECTOR_ENV" >&2
+            exit 1
+          fi
+          if ! grep -q '^BYBIT_REGIONAL_CONNECTOR_SECRET=.' "$CONNECTOR_ENV"; then
+            echo "ERROR: BYBIT_REGIONAL_CONNECTOR_SECRET is missing from $CONNECTOR_ENV" >&2
+            exit 1
+          fi
+
+          docker compose \
+            --env-file "$CONNECTOR_ENV" \
+            -f docker-compose.eu.yml \
+            -p quantforge-london \
+            up -d --build --remove-orphans
+
+          curl --fail --silent --show-error http://127.0.0.1:8091/health >/dev/null
+          docker compose -f docker-compose.eu.yml -p quantforge-london ps
+          REMOTE
