@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b10">
+  <meta name="description" content="An auditable, hand-checkable demonstration of QuantForge calculation correctness and deterministic replay.">
+  <meta property="og:title" content="QuantForge Accuracy Proof">
+  <meta property="og:description" content="Known-answer arithmetic, deterministic replay, depth-aware fills, and honest scope.">
+  <meta property="og:type" content="website">
+  <title>QuantForge Accuracy Proof</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07090d; --panel:rgba(17,21,29,.82); --panel-solid:#11151d; --line:rgba(255,255,255,.09); --line-strong:rgba(106,231,183,.27); --text:#f4f7fb; --muted:#9aa5b5; --accent:#6ae7b7; --accent-2:#7ea7ff; --warning:#ffc86b; --danger:#ff7d8c; --radius:22px; --shadow:0 24px 80px rgba(0,0,0,.45); --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace; --sans:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 15% -10%,rgba(126,167,255,.16),transparent 34rem),radial-gradient(circle at 90% 8%,rgba(106,231,183,.12),transparent 28rem),var(--bg); color:var(--text); font-family:var(--sans); line-height:1.55; }
+    a { color:inherit; } button,input { font:inherit; }
+    .shell { width:min(1180px,calc(100% - 32px)); margin:0 auto; }
+    .nav { position:sticky; top:0; z-index:20; border-bottom:1px solid var(--line); background:rgba(7,9,13,.76); backdrop-filter:blur(18px); }
+    .nav-inner { min-height:70px; display:flex; align-items:center; justify-content:space-between; gap:22px; }
+    .brand { display:inline-flex; align-items:center; gap:11px; text-decoration:none; font-weight:760; letter-spacing:-.03em; }
+    .brand-mark { width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--line-strong); border-radius:9px; background:linear-gradient(145deg,rgba(106,231,183,.16),rgba(126,167,255,.10)); box-shadow:inset 0 0 18px rgba(106,231,183,.08); color:var(--accent); font:700 15px var(--mono); }
+    .brand span:last-child { color:var(--muted); font-weight:600; }
+    .nav-links { display:flex; align-items:center; gap:20px; }
+    .nav-links a { color:var(--muted); text-decoration:none; font-size:.92rem; }
+    .nav-links a:hover { color:var(--text); }
+    .button { display:inline-flex; align-items:center; justify-content:center; gap:9px; min-height:46px; padding:0 17px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.035); color:var(--text); font-weight:700; text-decoration:none; cursor:pointer; transition:.2s ease; }
+    .button:hover { transform:translateY(-1px); border-color:rgba(255,255,255,.2); }
+    .button.primary { border-color:transparent; background:var(--accent); color:#07110d; box-shadow:0 10px 32px rgba(106,231,183,.16); }
+    .hero { padding:92px 0 64px; display:grid; grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr); align-items:center; gap:54px; }
+    .eyebrow { display:inline-flex; align-items:center; gap:9px; color:var(--accent); font:700 .78rem var(--mono); text-transform:uppercase; letter-spacing:.12em; }
+    .eyebrow::before { content:""; width:28px; height:1px; background:currentColor; }
+    h1 { margin:20px 0 22px; max-width:780px; font-size:clamp(3rem,8vw,6.9rem); line-height:.92; letter-spacing:-.072em; }
+    .hero-copy { max-width:750px; color:#b8c1ce; font-size:clamp(1.08rem,2vw,1.3rem); }
+    .hero-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:30px; }
+    .proof-card { position:relative; overflow:hidden; padding:25px; border:1px solid var(--line-strong); border-radius:var(--radius); background:linear-gradient(165deg,rgba(106,231,183,.08),transparent 40%),var(--panel); box-shadow:var(--shadow); }
+    .proof-card::after { content:""; position:absolute; inset:auto -90px -100px auto; width:220px; height:220px; border:1px solid rgba(106,231,183,.12); border-radius:50%; }
+    .status { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:25px; }
+    .status-badge { display:inline-flex; align-items:center; gap:9px; color:var(--accent); font:700 .78rem var(--mono); text-transform:uppercase; letter-spacing:.09em; }
+    .status-dot { width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 6px rgba(106,231,183,.10); }
+    .hash { color:var(--muted); font:.72rem var(--mono); }
+    .metric-big { margin:2px 0 5px; font:750 clamp(2.5rem,6vw,4.2rem)/1 var(--mono); letter-spacing:-.06em; }
+    .metric-label { color:var(--muted); }
+    .mini-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:24px; }
+    .mini { padding:14px; border:1px solid var(--line); border-radius:14px; background:rgba(0,0,0,.18); }
+    .mini strong { display:block; font:720 1.04rem var(--mono); }
+    .mini span { color:var(--muted); font-size:.78rem; }
+    section { padding:68px 0; }
+    .section-head { display:grid; grid-template-columns:minmax(0,.8fr) minmax(300px,1.2fr); gap:50px; margin-bottom:30px; align-items:end; }
+    h2 { margin:10px 0 0; font-size:clamp(2.15rem,5vw,4.2rem); line-height:1; letter-spacing:-.055em; }
+    .section-intro { color:var(--muted); font-size:1.04rem; }
+    .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+    .feature { min-height:220px; padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+    .feature-number { color:var(--accent); font:700 .78rem var(--mono); }
+    .feature h3 { margin:30px 0 10px; font-size:1.16rem; }
+    .feature p { margin:0; color:var(--muted); font-size:.91rem; }
+    .calculator { display:grid; grid-template-columns:.9fr 1.1fr; border:1px solid var(--line); border-radius:26px; overflow:hidden; background:var(--panel); box-shadow:var(--shadow); }
+    .calc-inputs { padding:30px; border-right:1px solid var(--line); }
+    .calc-results { padding:30px; background:rgba(0,0,0,.16); }
+    .input-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    label { display:grid; gap:7px; color:var(--muted); font-size:.82rem; font-weight:650; }
+    input { width:100%; min-height:48px; border:1px solid var(--line); border-radius:11px; outline:none; background:#0b0f15; color:var(--text); padding:0 13px; font-family:var(--mono); }
+    input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(106,231,183,.09); }
+    .formula { margin-top:18px; padding:14px; border:1px solid var(--line); border-radius:13px; color:#b7c1cd; background:rgba(255,255,255,.025); font:.78rem/1.65 var(--mono); overflow-x:auto; }
+    .result-row { display:flex; justify-content:space-between; gap:20px; padding:13px 0; border-bottom:1px solid var(--line); }
+    .result-row span:first-child { color:var(--muted); }
+    .result-row strong { font-family:var(--mono); text-align:right; }
+    .decision { margin-top:24px; padding:18px; border:1px solid var(--line-strong); border-radius:16px; background:rgba(106,231,183,.055); }
+    .decision.rejected { border-color:rgba(255,125,140,.3); background:rgba(255,125,140,.055); }
+    .decision strong { display:block; font-size:1.25rem; }
+    .decision span { color:var(--muted); }
+    .example-wrap { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .example { padding:25px; border:1px solid var(--line); border-radius:20px; background:var(--panel); }
+    .example.accepted { border-color:rgba(106,231,183,.22); }
+    .example.rejected { border-color:rgba(255,125,140,.22); }
+    .example-kicker { color:var(--muted); font:700 .77rem var(--mono); text-transform:uppercase; letter-spacing:.1em; }
+    .equation { margin:22px 0; padding:18px; border-radius:14px; background:#0b0f15; font:.9rem/1.7 var(--mono); }
+    .equation b { color:var(--accent); }
+    .example.rejected .equation b { color:var(--danger); }
+    .small-note { color:var(--muted); font-size:.87rem; }
+    .chain { display:grid; grid-template-columns:repeat(5,1fr); gap:0; counter-reset:chain; }
+    .chain-step { position:relative; padding:22px 20px 22px 0; counter-increment:chain; }
+    .chain-step:not(:last-child)::after { content:""; position:absolute; top:37px; right:0; width:calc(100% - 58px); height:1px; transform:translateX(50%); background:linear-gradient(90deg,var(--line-strong),var(--line)); z-index:-1; }
+    .chain-step::before { content:counter(chain,decimal-leading-zero); display:grid; place-items:center; width:36px; height:36px; margin-bottom:18px; border:1px solid var(--line-strong); border-radius:50%; background:var(--panel-solid); color:var(--accent); font:700 .72rem var(--mono); }
+    .chain-step h3 { margin:0 0 8px; font-size:1rem; }
+    .chain-step p { margin:0; color:var(--muted); font-size:.84rem; }
+    .scope { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .scope-card { padding:26px; border:1px solid var(--line); border-radius:20px; background:var(--panel); }
+    .scope-card h3 { margin:0 0 18px; }
+    .scope-card ul { margin:0; padding-left:20px; color:var(--muted); }
+    .scope-card li + li { margin-top:10px; }
+    .scope-card.proves { border-color:rgba(106,231,183,.22); }
+    .scope-card.not-proves { border-color:rgba(255,200,107,.2); }
+    .cta { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); align-items:center; gap:36px; padding:36px; border:1px solid var(--line-strong); border-radius:26px; background:radial-gradient(circle at 100% 0,rgba(126,167,255,.16),transparent 35rem),linear-gradient(145deg,rgba(106,231,183,.08),transparent 42%),var(--panel); box-shadow:var(--shadow); }
+    .cta h2 { font-size:clamp(2.1rem,5vw,4rem); }
+    .cta-copy p { color:var(--muted); max-width:700px; }
+    .download-box { padding:20px; border:1px solid var(--line); border-radius:17px; background:rgba(0,0,0,.2); }
+    .download-box code { display:block; color:var(--accent); font:.79rem/1.65 var(--mono); }
+    footer { padding:28px 0 45px; color:var(--muted); font-size:.84rem; }
+    .footer-inner { display:flex; justify-content:space-between; gap:25px; padding-top:24px; border-top:1px solid var(--line); }
+    .accent { color:var(--accent); }
+    @media (max-width:950px) { .hero,.section-head,.calculator,.cta { grid-template-columns:1fr; } .hero { padding-top:70px; } .calc-inputs { border-right:0; border-bottom:1px solid var(--line); } .grid-4 { grid-template-columns:1fr 1fr; } .chain { grid-template-columns:1fr 1fr; gap:8px; } .chain-step:not(:last-child)::after { display:none; } }
+    @media (max-width:650px) { .shell { width:min(100% - 22px,1180px); } .nav-inner { min-height:62px; } .nav-links a:not(.button) { display:none; } .nav-links .button { min-height:39px; padding:0 12px; font-size:.84rem; } .hero { padding:55px 0 36px; gap:34px; } h1 { font-size:clamp(3.2rem,17vw,5.4rem); } section { padding:48px 0; } .grid-4,.example-wrap,.scope,.input-grid,.chain { grid-template-columns:1fr; } .feature { min-height:0; } .feature h3 { margin-top:18px; } .proof-card,.calc-inputs,.calc-results,.cta { padding:20px; } .mini-grid { grid-template-columns:1fr; } .footer-inner { flex-direction:column; } }
+    @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } * { transition:none!important; } }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="Primary navigation">
+    <div class="shell nav-inner">
+      <a class="brand" href="#top" aria-label="QuantForge Accuracy Proof home"><span class="brand-mark">QF</span><span>QuantForge <span>/ Accuracy Proof</span></span></a>
+      <div class="nav-links"><a href="#method">Method</a><a href="#calculator">Calculator</a><a href="#scope">Scope</a><a class="button" href="https://quantforge.giorgiy.org/">Open QuantForge ↗</a></div>
+    </div>
+  </nav>
+
+  <main id="top">
+    <div class="shell hero">
+      <div>
+        <div class="eyebrow">Auditable crypto research</div>
+        <h1>Research you can challenge.</h1>
+        <p class="hero-copy">QuantForge exposes the arithmetic behind every tested decision: source quotes, depth, fees, assumptions, deterministic replay, and an independent known-answer certificate. No black-box performance claim. No promise of future profit.</p>
+        <div class="hero-actions"><a class="button primary" href="#calculator">Check the math</a><a class="button" href="quantforge_accuracy_certificate.py" download>Download certificate script ↓</a><a class="button" href="https://github.com/george-shepov/quantforge">View source ↗</a></div>
+      </div>
+      <aside class="proof-card" aria-label="Accuracy proof status">
+        <div class="status"><span class="status-badge"><span class="status-dot"></span>Known-answer method</span><span class="hash">DECIMAL ORACLE</span></div>
+        <div class="metric-big">Verify.</div><div class="metric-label">Do not merely trust.</div>
+        <div class="mini-grid"><div class="mini"><strong>Deterministic</strong><span>Same events + parameters</span></div><div class="mini"><strong>Depth-aware</strong><span>VWAP and partial fills</span></div><div class="mini"><strong>Traceable</strong><span>Source-event checksums</span></div><div class="mini"><strong>Simulation-first</strong><span>No mainnet claim</span></div></div>
+      </aside>
+    </div>
+
+    <section id="method"><div class="shell">
+      <div class="section-head"><div><div class="eyebrow">Proof, not promotion</div><h2>Four layers of evidence.</h2></div><p class="section-intro">“Accurate” is too vague. QuantForge separates formula correctness, replay reproducibility, ledger reconciliation, and market-model realism so each claim can be tested independently.</p></div>
+      <div class="grid-4">
+        <article class="feature"><span class="feature-number">01 / ORACLE</span><h3>Independent arithmetic</h3><p>High-precision Decimal calculations produce expected values without reusing the engine’s implementation.</p></article>
+        <article class="feature"><span class="feature-number">02 / REPLAY</span><h3>Canonical event order</h3><p>A fixed event stream and fixed parameters produce a reproducible result and result hash.</p></article>
+        <article class="feature"><span class="feature-number">03 / LEDGER</span><h3>Cash-flow reconciliation</h3><p>Actual simulated fill notionals determine fees, positions, cash, marked equity, return, and drawdown.</p></article>
+        <article class="feature"><span class="feature-number">04 / SCOPE</span><h3>Honest limitations</h3><p>Calculation correctness is never presented as proof of future profitability or live executability.</p></article>
+      </div>
+    </div></section>
+
+    <section id="calculator"><div class="shell">
+      <div class="section-head"><div><div class="eyebrow">Interactive known-answer test</div><h2>Change an input. Recalculate it yourself.</h2></div><p class="section-intro">The calculator mirrors QuantForge’s published scanner contract and also shows the exact two-leg cash-flow result, making the approximation boundary visible.</p></div>
+      <div class="calculator">
+        <div class="calc-inputs"><div class="input-grid">
+          <label>Buy ask ($)<input id="buyPrice" type="number" value="100" min="0.00000001" step="0.01"></label>
+          <label>Sell bid ($)<input id="sellPrice" type="number" value="101" min="0.00000001" step="0.01"></label>
+          <label>Quantity<input id="quantity" type="number" value="2" min="0.00000001" step="0.01"></label>
+          <label>Fee per leg (bps)<input id="feeBps" type="number" value="1" min="0" step="0.1"></label>
+          <label>Slippage per leg (bps)<input id="slippageBps" type="number" value="0" min="0" step="0.1"></label>
+          <label>Minimum edge (bps)<input id="minimumBps" type="number" value="5" min="0" step="0.1"></label>
+        </div><div class="formula">gross = (sell − buy) ÷ buy × 10,000<br>expected = gross − 2 × fee − 2 × slippage<br>scanner estimate = buy × quantity × expected ÷ 10,000<br>exact cash P&amp;L = proceeds − cost − both actual-notional fees</div></div>
+        <div class="calc-results" aria-live="polite">
+          <div class="result-row"><span>Gross edge</span><strong id="grossEdge">—</strong></div><div class="result-row"><span>Two-leg fees</span><strong id="feeCost">—</strong></div><div class="result-row"><span>Two-leg slippage allowance</span><strong id="slippageCost">—</strong></div><div class="result-row"><span>Expected edge</span><strong id="expectedEdge">—</strong></div><div class="result-row"><span>Scanner estimate</span><strong id="scannerProfit">—</strong></div><div class="result-row"><span>Exact fee cash P&amp;L</span><strong id="exactProfit">—</strong></div><div class="result-row"><span>Estimate difference</span><strong id="difference">—</strong></div>
+          <div id="decisionBox" class="decision"><strong id="decision">—</strong><span id="decisionReason">—</span></div>
+        </div>
+      </div>
+    </div></section>
+
+    <section id="examples"><div class="shell">
+      <div class="section-head"><div><div class="eyebrow">Hand-checkable fixtures</div><h2>Simple enough for a whiteboard.</h2></div><p class="section-intro">Start with examples where the expected answer is obvious. Then move to depth, partial fills, and full replay. Complexity should be earned, not hidden.</p></div>
+      <div class="example-wrap">
+        <article class="example accepted"><div class="example-kicker">Accepted example</div><h3>Buy $100 · Sell $101 · 2 units · 1 bp per leg</h3><div class="equation">gross = (101 − 100) ÷ 100 × 10,000 = <b>100 bps</b><br>expected = 100 − 2 = <b>98 bps</b><br>scanner estimate = 100 × 2 × .0098 = <b>$1.9600</b><br>exact fee cash P&amp;L = 202 − 200 − .0200 − .0202 = <b>$1.9598</b></div><p class="small-note">The $0.0002 difference is disclosed: the scanner uses a compact basis-point estimate; replay charges each leg using its actual simulated notional.</p></article>
+        <article class="example rejected"><div class="example-kicker">Rejected example</div><h3>Buy $100 · Sell $100.05 · 0.4 units · 2 bps per leg</h3><div class="equation">gross = (100.05 − 100) ÷ 100 × 10,000 = <b>5 bps</b><br>expected = 5 − 4 = <b>1 bp</b><br>minimum required = <b>5 bps</b><br>decision = <b>REJECTED</b></div><p class="small-note">Rejected rows remain evidence. They show the arithmetic and the exact threshold reason rather than disappearing from the research record.</p></article>
+      </div>
+    </div></section>
+
+    <section id="provenance"><div class="shell">
+      <div class="section-head"><div><div class="eyebrow">Evidence chain</div><h2>From quote to certificate.</h2></div><p class="section-intro">A result is useful only when another researcher can reconstruct where it came from and which assumptions produced it.</p></div>
+      <div class="chain"><div class="chain-step"><h3>Source events</h3><p>Exchange, symbol, timestamp, sequence, payload, and SHA-256 checksum.</p></div><div class="chain-step"><h3>Normalized books</h3><p>Canonical symbols, sorted levels, finite positive prices and quantities.</p></div><div class="chain-step"><h3>Decision record</h3><p>Route, VWAP, quantity, fees, edge, decision, and rejection reasons.</p></div><div class="chain-step"><h3>Deterministic replay</h3><p>Canonical ordering, simulated fills, fees, positions, and equity curve.</p></div><div class="chain-step"><h3>Independent oracle</h3><p>Expected versus actual values, tolerance, source fingerprints, and pass/fail.</p></div></div>
+    </div></section>
+
+    <section id="scope"><div class="shell">
+      <div class="section-head"><div><div class="eyebrow">Claim boundary</div><h2>What this proof means.</h2></div><p class="section-intro">QuantForge is a research laboratory. A credible laboratory states both what an experiment establishes and what remains unresolved.</p></div>
+      <div class="scope"><article class="scope-card proves"><h3><span class="accent">✓</span> The certificate can establish</h3><ul><li>Formula implementation for the included known-answer fixtures</li><li>Depth-weighted price and partial-fill arithmetic</li><li>Per-fill fee accounting and portfolio identities</li><li>Deterministic replay for a fixed event stream</li><li>Seed reproducibility for Monte Carlo resampling</li></ul></article><article class="scope-card not-proves"><h3>△ It does not establish</h3><ul><li>Future strategy profitability</li><li>That every displayed opportunity was executable live</li><li>Exact exchange queue position, latency, or matching behavior</li><li>That synthetic fallback data equals a live market</li><li>Correctness for every possible input and every strategy</li></ul></article></div>
+    </div></section>
+
+    <section><div class="shell cta"><div class="cta-copy"><div class="eyebrow">Simulation-first research</div><h2>Record. Replay. Question every result.</h2><p>QuantForge is built for falsifiable crypto strategy research: deterministic market replay, order-book depth, explicit assumptions, walk-forward analysis, Monte Carlo risk testing, and explanations for rejected opportunities.</p><div class="hero-actions"><a class="button primary" href="https://quantforge.giorgiy.org/">Explore QuantForge ↗</a><a class="button" href="https://github.com/george-shepov/quantforge">Inspect the repository ↗</a></div></div><div class="download-box"><code>$ python tools/quantforge_accuracy_certificate.py</code><code>→ quantforge-accuracy-certificate.json</code><br><a class="button" href="quantforge_accuracy_certificate.py" download>Download the proof harness ↓</a></div></div></section>
+  </main>
+
+  <footer><div class="shell footer-inner"><span>QuantForge Accuracy Proof · Generic research demonstration</span><span>Calculation correctness ≠ predictive certainty.</span></div></footer>
+
+  <script>
+    const ids=["buyPrice","sellPrice","quantity","feeBps","slippageBps","minimumBps"];
+    const money=new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:4,maximumFractionDigits:8});
+    const number=new Intl.NumberFormat("en-US",{minimumFractionDigits:4,maximumFractionDigits:8});
+    function value(id){const parsed=Number(document.getElementById(id).value);return Number.isFinite(parsed)?parsed:0;}
+    function updateCalculator(){
+      const buy=value("buyPrice"),sell=value("sellPrice"),quantity=value("quantity"),fee=Math.max(value("feeBps"),0),slippage=Math.max(value("slippageBps"),0),minimum=Math.max(value("minimumBps"),0);
+      const valid=buy>0&&sell>0&&quantity>0,gross=valid?(sell-buy)/buy*10000:0,feeCost=2*fee,slippageCost=2*slippage,expected=gross-feeCost-slippageCost,scanner=valid?buy*quantity*expected/10000:0,exactFees=valid?(buy*quantity*fee/10000)+(sell*quantity*fee/10000):0,exactBeforeSlippage=valid?(sell-buy)*quantity-exactFees:0,slippageAllowance=valid?buy*quantity*slippageCost/10000:0,exact=exactBeforeSlippage-slippageAllowance,delta=scanner-exact,accepted=valid&&expected>=minimum;
+      document.getElementById("grossEdge").textContent=`${number.format(gross)} bps`; document.getElementById("feeCost").textContent=`${number.format(feeCost)} bps`; document.getElementById("slippageCost").textContent=`${number.format(slippageCost)} bps`; document.getElementById("expectedEdge").textContent=`${number.format(expected)} bps`; document.getElementById("scannerProfit").textContent=money.format(scanner); document.getElementById("exactProfit").textContent=money.format(exact); document.getElementById("difference").textContent=money.format(delta);
+      const box=document.getElementById("decisionBox"); box.classList.toggle("rejected",!accepted); document.getElementById("decision").textContent=!valid?"INVALID INPUT":accepted?"ACCEPTED BY THRESHOLD":"REJECTED BY THRESHOLD"; document.getElementById("decisionReason").textContent=!valid?"Prices and quantity must be greater than zero.":accepted?`${number.format(expected)} bps meets or exceeds the ${number.format(minimum)} bps minimum.`:`${number.format(expected)} bps is below the ${number.format(minimum)} bps minimum.`;
+    }
+    ids.forEach(id=>document.getElementById(id).addEventListener("input",updateCalculator)); updateCalculator();
+  </script>
+</body>
+</html>
