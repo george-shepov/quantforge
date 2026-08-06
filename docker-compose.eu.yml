@@ -1,0 +1,19 @@
+services:
+  london-connector:
+    build:
+      context: ./edge/london-connector
+    container_name: quantforge_london_connector
+    restart: unless-stopped
+    environment:
+      BYBIT_REGIONAL_CONNECTOR_SECRET: ${BYBIT_REGIONAL_CONNECTOR_SECRET:?Set BYBIT_REGIONAL_CONNECTOR_SECRET}
+      BYBIT_CONNECTOR_TIMEOUT_SECONDS: ${BYBIT_CONNECTOR_TIMEOUT_SECONDS:-15}
+      CONNECTOR_SQLITE_PATH: /data/replay.sqlite3
+      QUANTFORGE_NODE_ID: eu-london
+    ports:
+      - "127.0.0.1:8091:8091"
+    volumes:
+      - ./edge/london-connector/data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
