@@ -1,0 +1,67 @@
+name: Cuyahoga connectivity from London
+
+on:
+  push:
+    branches:
+      - ops/cuyahoga-connectivity-london-20261007
+    paths:
+      - ".github/workflows/cuyahoga-connectivity-london.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-london
+    steps:
+      - name: Configure London SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LONDON_VPS_SSH_PRIVATE_KEY }}
+
+      - name: Trust London host key
+        env:
+          LONDON_VPS_HOST: ${{ secrets.LONDON_VPS_HOST }}
+          LONDON_VPS_PORT: ${{ secrets.LONDON_VPS_PORT }}
+        run: |
+          set -euo pipefail
+          : "${LONDON_VPS_HOST:?LONDON_VPS_HOST is required}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "${LONDON_VPS_PORT:-22}" -H "$LONDON_VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Check Cuyahoga connectivity from London host
+        env:
+          LONDON_VPS_HOST: ${{ secrets.LONDON_VPS_HOST }}
+          LONDON_VPS_USER: ${{ secrets.LONDON_VPS_USER }}
+          LONDON_VPS_PORT: ${{ secrets.LONDON_VPS_PORT }}
+        run: |
+          set -euo pipefail
+          : "${LONDON_VPS_HOST:?LONDON_VPS_HOST is required}"
+          : "${LONDON_VPS_USER:?LONDON_VPS_USER is required}"
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -p "${LONDON_VPS_PORT:-22}")
+          ssh "${ssh_opts[@]}" "$LONDON_VPS_USER@$LONDON_VPS_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo "hostname=$(hostname)"
+          urls=(
+            "https://cpdocket.cp.cuyahogacounty.gov/"
+            "https://cpdocket.cp.cuyahogacounty.gov/Search.aspx"
+            "https://cpdocket.cp.cuyahogacounty.us/"
+            "https://cpdocket.cp.cuyahogacounty.us/Search.aspx"
+          )
+          for url in "${urls[@]}"; do
+            echo "=== $url ==="
+            tmp=$(mktemp)
+            set +e
+            result=$(curl -sS -L               --max-time 20               --connect-timeout 8               --user-agent 'Mozilla/5.0 court-connectivity-diagnostic/1.0'               -o /dev/null               -D "$tmp"               -w 'curl_http=%{http_code} curl_remote_ip=%{remote_ip} curl_redirects=%{num_redirects} curl_final_url=%{url_effective} curl_time=%{time_total}\n'               "$url" 2>&1)
+            rc=$?
+            set -e
+            echo "curl_exit=$rc"
+            echo "$result"
+            awk 'BEGIN{IGNORECASE=1} /^HTTP\// || /^location:/ || /^server:/ || /^retry-after:/ {print}' "$tmp" | tail -n 20
+            rm -f "$tmp"
+          done
+          REMOTE
