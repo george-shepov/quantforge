@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - docker-compose.eu.yml
+      - docs/**
       - edge/london-connector/**
       - .github/workflows/deploy-london-edge.yml
 
@@ -27,6 +28,37 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Assemble London static demos
+        run: |
+          set -euo pipefail
+          rm -rf .london-static .fieldkit-src
+          mkdir -p .london-static/quantforge .london-static/fieldkit
+
+          cp edge/london-connector/site/index.html .london-static/index.html
+          cp -a docs/. .london-static/quantforge/
+
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/george-shepov/FieldKit.git .fieldkit-src
+          git -C .fieldkit-src sparse-checkout set \
+            shared kanban linux-trainer drivers-license privacy-camera image-rater snake
+
+          cp edge/london-connector/site/fieldkit-index.html .london-static/fieldkit/index.html
+          for path in shared kanban linux-trainer drivers-license privacy-camera image-rater snake; do
+            cp -a ".fieldkit-src/$path" ".london-static/fieldkit/$path"
+          done
+          if test -f .fieldkit-src/manifest.webmanifest; then
+            cp .fieldkit-src/manifest.webmanifest .london-static/fieldkit/manifest.webmanifest
+          fi
+
+          cat > .london-static/fieldkit/sw.js <<'SW'
+          self.addEventListener('install', () => self.skipWaiting());
+          self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+          SW
+
+          FIELDKIT_SHA="$(git -C .fieldkit-src rev-parse HEAD)"
+          printf '{"quantforge":"%s","fieldkit":"%s"}\n' \
+            "$GITHUB_SHA" "$FIELDKIT_SHA" > .london-static/release.json
+
       - name: Configure London SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -44,12 +76,13 @@ jobs:
           ssh-keyscan -p "${LONDON_VPS_PORT:-22}" -H "$LONDON_VPS_HOST" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Deploy London connector only
+      - name: Deploy London connector and static demos
         env:
           LONDON_VPS_HOST: ${{ secrets.LONDON_VPS_HOST }}
           LONDON_VPS_USER: ${{ secrets.LONDON_VPS_USER }}
           LONDON_VPS_PORT: ${{ secrets.LONDON_VPS_PORT }}
           LONDON_DEPLOY_DIR: ${{ secrets.LONDON_DEPLOY_DIR }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           : "${LONDON_VPS_HOST:?LONDON_VPS_HOST is required}"
@@ -61,15 +94,62 @@ jobs:
             "mkdir -p '$LONDON_DEPLOY_DIR'"
 
           tar --exclude-vcs --exclude='./.github' -czf - \
-            docker-compose.eu.yml edge/london-connector | \
+            docker-compose.eu.yml edge/london-connector .london-static | \
             ssh "${ssh_opts[@]}" "$LONDON_VPS_USER@$LONDON_VPS_HOST" \
             "set -e; tar -xzf - -C '$LONDON_DEPLOY_DIR'"
 
           ssh "${ssh_opts[@]}" "$LONDON_VPS_USER@$LONDON_VPS_HOST" \
-            "LONDON_DEPLOY_DIR='$LONDON_DEPLOY_DIR' bash -se" <<'REMOTE'
+            "LONDON_DEPLOY_DIR='$LONDON_DEPLOY_DIR' RELEASE_SHA='$RELEASE_SHA' bash -se" <<'REMOTE'
           set -Eeuo pipefail
           DEPLOY_DIR="$LONDON_DEPLOY_DIR"
           cd "$DEPLOY_DIR"
+
+
+          # Publish the demo bundle as an immutable release and flip one symlink.
+          # The previous releases remain available for immediate rollback.
+          STATIC_ROOT=/srv/www/london.giorgiy.org
+          RELEASE_DIR="$STATIC_ROOT/releases/$RELEASE_SHA"
+          sudo -n rm -rf "$RELEASE_DIR"
+          sudo -n mkdir -p "$RELEASE_DIR"
+          sudo -n cp -a "$DEPLOY_DIR/.london-static/." "$RELEASE_DIR/"
+          sudo -n find "$RELEASE_DIR" -type d -exec chmod 0755 {} +
+          sudo -n find "$RELEASE_DIR" -type f -exec chmod 0644 {} +
+          sudo -n ln -sfnT "$RELEASE_DIR" "$STATIC_ROOT/current"
+
+          # Keep a small local rollback window.
+          sudo -n find "$STATIC_ROOT/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | \
+            sort -rn | awk 'NR > 5 {print $2}' | xargs -r sudo -n rm -rf
+
+          # Reuse the nginx site that already owns eu.quantforge.giorgiy.org.
+          # If it is the original connector-only config, replace it transactionally.
+          NGINX_SOURCE="$DEPLOY_DIR/edge/london-connector/nginx.eu.conf"
+          ACTIVE_NGINX="$(sudo -n grep -RslF 'server_name eu.quantforge.giorgiy.org;' \
+            /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -n1 || true)"
+          if test -z "$ACTIVE_NGINX"; then
+            echo 'ERROR: could not locate the active eu.quantforge.giorgiy.org nginx config' >&2
+            exit 1
+          fi
+          NGINX_TARGET="$(readlink -f "$ACTIVE_NGINX")"
+
+          if sudo -n cmp -s "$NGINX_SOURCE" "$NGINX_TARGET"; then
+            : # The active site points directly at the deployed file.
+          elif sudo -n grep -Fq 'proxy_pass http://127.0.0.1:8091/' "$NGINX_TARGET" && \
+               sudo -n grep -Fq 'return 404;' "$NGINX_TARGET"; then
+            NGINX_BACKUP="$NGINX_TARGET.pre-static-$RELEASE_SHA"
+            sudo -n cp -a "$NGINX_TARGET" "$NGINX_BACKUP"
+            sudo -n install -m 0644 "$NGINX_SOURCE" "$NGINX_TARGET"
+            if ! sudo -n nginx -t; then
+              sudo -n cp -a "$NGINX_BACKUP" "$NGINX_TARGET"
+              sudo -n nginx -t
+              exit 1
+            fi
+          else
+            echo "ERROR: refusing to overwrite unexpected nginx config: $NGINX_TARGET" >&2
+            exit 1
+          fi
+
+          sudo -n nginx -t
+          sudo -n systemctl reload nginx || sudo -n nginx -s reload
 
           # London is the only deployment target that requires the dedicated
           # Vault-agent trust chain and scoped runtime configuration.
@@ -100,5 +180,13 @@ jobs:
             up -d --build --remove-orphans
 
           curl --fail --silent --show-error http://127.0.0.1:8091/health >/dev/null
+          curl --fail --silent --show-error --resolve eu.quantforge.giorgiy.org:443:127.0.0.1 \
+            https://eu.quantforge.giorgiy.org/healthz | grep -qx 'london-static-ok'
+          curl --fail --silent --show-error --resolve eu.quantforge.giorgiy.org:443:127.0.0.1 \
+            https://eu.quantforge.giorgiy.org/ >/dev/null
+          curl --fail --silent --show-error --resolve eu.quantforge.giorgiy.org:443:127.0.0.1 \
+            https://eu.quantforge.giorgiy.org/quantforge/ >/dev/null
+          curl --fail --silent --show-error --resolve eu.quantforge.giorgiy.org:443:127.0.0.1 \
+            https://eu.quantforge.giorgiy.org/fieldkit/ >/dev/null
           docker compose -f docker-compose.eu.yml -p quantforge-london ps
           REMOTE
