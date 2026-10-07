@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>London Demo Rack</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f8fafc;background:#06080d}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0,#172554 0,transparent 34rem),linear-gradient(180deg,#090d16,#05070b)}
+    main{width:min(1080px,calc(100% - 32px));margin:auto;padding:64px 0 80px}
+    .eyebrow{font:700 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:#93c5fd}
+    h1{font-size:clamp(42px,8vw,86px);line-height:.94;letter-spacing:-.055em;margin:18px 0 20px;max-width:900px}
+    .lead{max-width:760px;color:#aeb8c7;font-size:18px;line-height:1.6}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:42px}
+    .card{display:block;text-decoration:none;color:inherit;border:1px solid #25304a;background:rgba(12,18,31,.76);border-radius:18px;padding:24px;min-height:230px;transition:.18s ease;box-shadow:0 18px 50px rgba(0,0,0,.2)}
+    .card:hover{transform:translateY(-3px);border-color:#60a5fa;background:#101827}.card h2{margin:18px 0 8px;font-size:25px}.card p{color:#94a3b8;line-height:1.55;margin:0}
+    .tag{display:inline-flex;border:1px solid #334155;border-radius:999px;padding:6px 9px;font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#cbd5e1}
+    .foot{display:flex;gap:14px;flex-wrap:wrap;margin-top:26px;color:#7f8da3;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}.foot a{color:#93c5fd}
+    @media(max-width:800px){main{padding-top:42px}.grid{grid-template-columns:1fr}.card{min-height:0}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">AWS · EU-WEST-2 · London</div>
+  <h1>Small edge. Useful demos.</h1>
+  <p class="lead">This host keeps the regional QuantForge connector isolated while also serving a few static, low-risk project demos. No production application state is stored in the demo pages.</p>
+  <section class="grid">
+    <a class="card" href="/quantforge/">
+      <span class="tag">STATIC SHOWCASE</span>
+      <h2>QuantForge</h2>
+      <p>Simulation-first crypto research, deterministic replay, arbitrage analysis, experiment tooling, and the London regional-edge story.</p>
+    </a>
+    <a class="card" href="/fieldkit/">
+      <span class="tag">STATIC SAMPLER</span>
+      <h2>FieldKit</h2>
+      <p>A curated handful of offline-first utilities and training demos, served locally from the London host.</p>
+    </a>
+    <a class="card" href="/api/edge/health">
+      <span class="tag">READ-ONLY API</span>
+      <h2>London Edge Health</h2>
+      <p>Health endpoint for the QuantForge regional market-data connector. Exchange access remains read-only and execution-disabled.</p>
+    </a>
+  </section>
+  <div class="foot">
+    <span><a href="/healthz">static health</a></span>
+    <span><a href="/release.json">release metadata</a></span>
+    <span><a href="https://quantforge.giorgiy.org/">primary QuantForge</a></span>
+  </div>
+</main>
+</body>
+</html>
